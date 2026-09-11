@@ -3,7 +3,7 @@ inherits: base.yaml
 # Point `root` at your extracted dataset: one folder per identity.
 data:
   name: faces
-  root: ../archive/casia-webface-folders
+  root: /data/bijaypandey/archive/casia-webface-folders
   image_size: 112
   batch_size: 128
   max_identities: 1000        # subset hard -- you do not need a SOTA model

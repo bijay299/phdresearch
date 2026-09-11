@@ -158,6 +158,86 @@ disguise, so nothing of value is lost.
 
 ---
 
+## 2026-09-11 — CASIA-WebFace re-extracted with `--min-images 40`
+
+**Decided:** re-extract at `/data/bijaypandey/archive/casia-webface-folders`
+using `python scripts/convert_rec_to_folders.py --min-images 40` (the
+script's default is 20).
+**Because:** more headroom for the week 5-8 held-out generalisation split.
+`make_forget_split(mode='subset')` needs enough images per identity that
+both the forget and forget-heldout sides stay usable; 20 was thin once
+`max_images_per_identity=50` and a forget fraction are applied on top.
+**Supersedes:** the 2026-09-10 extraction (1000 identities / 36,364 images,
+`--min-images` at the script default of 20). The underlying image set
+differs between the two extractions -- do not assume identity or image
+overlap; any numbers from the 36,364-image extraction are not comparable.
+
+### Verified
+
+- `FaceFolder` (`src/data.py`) loads it correctly: 1000 identities, 48,519
+  images, matching the conversion script's own count.
+- Per-identity image count: min 40, median 50, max 50, mean 48.52 -- nearly
+  every identity hits the `--max-images-per-identity 50` ceiling, which is
+  what the raised floor was for.
+- Contact sheet at `notes/assets/casia_folders_contact_sheet.png` (3
+  identities x 8 images each, one row per identity, labelled with folder
+  id/label/n) -- confirmed real appearance variation (pose, lighting,
+  expression) within each identity, not repeated/near-duplicate frames.
+- Within-identity pixel correlation (grayscale, resized 64x64, Pearson r
+  pooled over all image pairs within each of 20 random identities): **mean
+  0.246, range 0.096-0.520**. Consistent with the 2026-09-10 extraction's
+  0.21 mean -- same conclusion holds: real variation, not burst frames, so
+  the within-identity generalisation experiment stays viable.
+
+### Consequence
+
+`configs/faces_ce.yaml` `data.root` updated to
+`/data/bijaypandey/archive/casia-webface-folders` (`configs/faces_arcface.yaml`
+inherits it).
+
+---
+
+## 2026-09-11 — Project moved to the shared server "hyperplane"
+
+**Decided:** repo and data now live on hyperplane, not the laptop: repo at
+`/data/bijaypandey/phdresearch`, dataset at `/data/bijaypandey/archive`
+(`casia-webface-folders` extraction above, plus the raw `casia-webface`
+RecordIO source).
+**Because:** move to shared compute for real training runs.
+**Supersedes:** any earlier assumption of exclusive, single-GPU, single-user
+access to the machine running this code.
+
+### Repo audit for old-machine references
+
+Searched README.md, CLAUDE.md, `scripts/`, `configs/`, `notes/`, `.vscode/`
+for hardcoded laptop paths (`Downloads`, `/Users/`, `~/phdresearch`, etc.).
+**Found none** -- the codebase already used portable paths throughout:
+`ROOT.parent / "archive" / ...` in `convert_rec_to_folders.py`, `./data` in
+`base.yaml`, `${workspaceFolder}` in `.vscode/*.json`. The one path that did
+need updating was `configs/faces_ce.yaml`'s `data.root`, fixed to the
+absolute hyperplane path in the entry above.
+
+### GPU sharing -- no pinning anywhere in this repo
+
+hyperplane has 4 GPUs, shared across users. `device: auto`
+(`configs/base.yaml`) resolves through `resolve_device()` in
+`scripts/run_experiment.py` to plain `"cuda"`, which is PyTorch's default
+device -- **always index 0** -- when nothing is pinned.
+`utils.device_string()` confirms this: it reads
+`torch.cuda.get_device_name(0)` unconditionally. Nothing in this repo sets
+`CUDA_VISIBLE_DEVICES`.
+
+**Consequence:** two sessions launched without pinning a device will
+silently land on GPU 0 together and collide -- no error, just contention and
+possibly an OOM that looks like a code bug.
+
+**Rule going forward:** always check `nvidia-smi` for a free GPU and export
+`CUDA_VISIBLE_DEVICES=<n>` before launching any real (non-smoke) run. Added
+to README's Setup section so a future session doesn't have to rediscover
+this.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO

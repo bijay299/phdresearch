@@ -76,20 +76,32 @@ that every module is wired together:
 python scripts/run_experiment.py --config configs/cifar_ce.yaml --smoke
 ```
 
+**On a shared GPU machine, always pin a device.** `device: auto` in
+`configs/base.yaml` resolves to plain `"cuda"`, which is PyTorch's default
+device -- GPU 0 -- if nothing is pinned. Nothing in this repo sets
+`CUDA_VISIBLE_DEVICES` for you, so two people running at once will silently
+collide on the same card. Check for a free GPU and pin one before any real
+(non-smoke) run:
+
+```bash
+nvidia-smi                              # find a free GPU
+CUDA_VISIBLE_DEVICES=0 python scripts/run_experiment.py --config configs/cifar_ce.yaml
+```
+
 ## Running
 
 ```bash
 # the pilot pair -- 20-30 min each on a 48 GB card
-python scripts/run_experiment.py --config configs/cifar_ce.yaml
-python scripts/run_experiment.py --config configs/cifar_arcface.yaml
+CUDA_VISIBLE_DEVICES=0 python scripts/run_experiment.py --config configs/cifar_ce.yaml
+CUDA_VISIBLE_DEVICES=0 python scripts/run_experiment.py --config configs/cifar_arcface.yaml
 python scripts/run_experiment.py --compare logs/
 
 # turn on unlearning
-python scripts/run_experiment.py --config configs/cifar_ce.yaml \
+CUDA_VISIBLE_DEVICES=0 python scripts/run_experiment.py --config configs/cifar_ce.yaml \
     --set unlearn.enabled=true
 
 # faces, once you have the data
-python scripts/run_experiment.py --config configs/faces_arcface.yaml
+CUDA_VISIBLE_DEVICES=0 python scripts/run_experiment.py --config configs/faces_arcface.yaml
 ```
 
 Every run writes `logs/<name>/` containing `config.json`, `env.json` (git
