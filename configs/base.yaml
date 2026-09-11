@@ -1,0 +1,46 @@
+# Shared defaults. Per-experiment configs inherit from this and override
+# ONLY what they need to. The experiment varies the head; everything else
+# must stay identical across conditions or the comparison is confounded.
+
+seed: 0
+device: auto            # auto | cuda | cpu
+out_dir: logs
+
+data:
+  name: cifar10
+  root: ./data
+  batch_size: 128
+  num_workers: 4
+
+backbone:
+  arch: resnet18
+  small_input: true     # 3x3 stem for 32x32 inputs; set false for faces
+  feat_dim: null        # null = backbone native width (512 for resnet18)
+  pretrained: false
+
+head:
+  name: ce              # ce | arcface | cosface
+  # margin heads only:
+  # s: 64.0
+  # m: 0.5
+
+train:
+  epochs: 30
+  lr: 0.1
+  weight_decay: 0.0005
+  optimizer: sgd
+  scheduler: cosine
+  warmup_epochs: 0
+
+unlearn:
+  enabled: false
+  forget_class: 0
+  split_mode: all       # all | subset
+  forget_fraction: 0.5  # only used when split_mode=subset
+  methods: [finetune, neggrad_plus, random_label]
+  classifier_only_diagnostic: true   # rerun each method with backbone frozen
+  retrain_reference: true   # gold-standard baseline; full training run, set
+                             # false to skip when iterating on something else
+  epochs: 3
+  lr: 0.001
+  weight_decay: 0.0005

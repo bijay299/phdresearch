@@ -1,0 +1,7 @@
+inherits: base.yaml
+head:
+  name: arcface
+  s: 30.0      # 64 is tuned for ~10k identities; too sharp for 10 classes
+  m: 0.5
+train:
+  warmup_epochs: 5   # normalised heads often diverge without warmup

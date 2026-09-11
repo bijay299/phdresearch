@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tests: metrics",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test_metrics.py",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Train: CIFAR + CE",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/run_experiment.py",
+      "args": ["--config", "configs/cifar_ce.yaml"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Train: CIFAR + ArcFace",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/run_experiment.py",
+      "args": ["--config", "configs/cifar_arcface.yaml"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Smoke test (CPU, 1 epoch)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/run_experiment.py",
+      "args": ["--config", "configs/cifar_ce.yaml", "--smoke"],
+      "console": "integratedTerminal"
+    }
+  ]
+}

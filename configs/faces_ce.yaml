@@ -1,0 +1,30 @@
+inherits: base.yaml
+
+# Point `root` at your extracted dataset: one folder per identity.
+data:
+  name: faces
+  root: ../archive/casia-webface-folders
+  image_size: 112
+  batch_size: 128
+  max_identities: 1000        # subset hard -- you do not need a SOTA model
+  min_images: 20
+  max_images_per_identity: 50
+  test_fraction: 0.2          # split BY IMAGE within each identity, so the
+                              # test set still contains the forgotten person
+
+backbone:
+  arch: resnet18
+  small_input: false          # 112x112 inputs keep the standard stem
+  feat_dim: 512               # face-recognition convention
+
+head:
+  name: ce
+
+train:
+  epochs: 40
+  lr: 0.1
+
+unlearn:
+  enabled: true
+  forget_class: 0
+  split_mode: all

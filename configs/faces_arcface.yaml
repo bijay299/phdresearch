@@ -1,0 +1,7 @@
+inherits: faces_ce.yaml
+head:
+  name: arcface
+  s: 64.0     # standard for face recognition with many identities
+  m: 0.5
+train:
+  warmup_epochs: 5

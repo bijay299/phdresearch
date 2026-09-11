@@ -1,0 +1,7 @@
+inherits: base.yaml
+head:
+  name: cosface
+  s: 30.0
+  m: 0.35
+train:
+  warmup_epochs: 5

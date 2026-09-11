@@ -1,0 +1,16 @@
+# Core
+torch>=2.2.0
+torchvision>=0.17.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+PyYAML>=6.0
+
+# Progress / logging
+tqdm>=4.66.0
+pandas>=2.0.0
+
+# Plotting (week 9-10)
+matplotlib>=3.7.0
+
+# Dev
+pytest>=7.4.0

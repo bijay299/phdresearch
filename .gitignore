@@ -1,0 +1,24 @@
+# Data and outputs -- never commit these
+data/
+logs/
+*.pt
+*.pth
+*.npz
+*.ckpt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# Keep the folder structure
+!logs/.gitkeep
+!data/.gitkeep
