@@ -238,6 +238,75 @@ this.
 
 ---
 
+## 2026-09-11 — CIFAR-10 pilot run: uncentred NC3 is not comparable across heads at baseline
+
+**What happened:** first real GPU pilot, `configs/cifar_ce.yaml` and
+`configs/cifar_arcface.yaml`, 30 epochs each, seed 0, unlearning disabled
+(baseline geometry only). Both trained cleanly (loss descended monotonically
+for both; ArcFace did not diverge at s=30/m=0.5/5 warmup epochs, no config
+change needed). Test accuracy: CE 93.36%, ArcFace 91.79% -- comparable,
+fairness gate holds.
+
+`nc3_uncentred_mean` came back **0.7211 for CE, -0.8789 for ArcFace** -- on
+the *baseline* model, before any unlearning, before any forget class exists.
+Surprising enough to investigate before trusting it: the AISTATS mechanism
+predicts uncentred cosine goes negative only *after* unlearning targets a
+class, and `nc3_centred_mean` for the same two runs is 0.9612 vs 0.9619 --
+essentially identical -- so something about the *uncentred* convention
+specifically is behaving differently across heads, not the underlying
+geometry.
+
+**Diagnosis (`diag_nc3.py`, scratch, not checked in):** loaded the ArcFace
+checkpoint and checked `cos(mean(W), mean(features))` directly:
+**-0.9999**. The classifier weight rows and the raw backbone features share
+a huge, nearly-antiparallel *shared* component -- `||mean(W)|| = 2.29`
+against an average per-class `||W_k|| = 2.37`, i.e. the shared component is
+almost as large as the class-specific one. Same on the feature side:
+`||mean(features)|| = 2.92` against average `||mu_k|| = 3.01`.
+
+**Why this happens:** backbone features are post-ReLU (non-negative), so
+every class's raw mean feature shares a large common "DC" direction just
+from that. Under CE the loss is an unnormalised dot product, so training
+directly suppresses/controls that shared component. Under ArcFace both
+features and weights are L2-normalised before the loss -- by design, see
+`heads.py`'s docstring, this asymmetry is not a bug to fix -- so the loss
+carries zero gradient signal about the shared directional component of `W`;
+it drifts under weight decay + init with nothing pulling it toward
+alignment with the shared feature direction, and the two ended up almost
+exactly antiparallel.
+
+This antiparallel DC term subtracts nearly the same large negative quantity
+from every class's raw cosine, which is why all ten per-class ArcFace
+cosines cluster tightly around -0.88 regardless of class. It does not hurt
+classification: argmax only needs relative ranking, and the class-specific
+angular gap survives the shared offset (mean own-class cosine -0.878 vs.
+mean best-other-class cosine -0.939 -> 97.0% train accuracy under the
+no-margin cosine, matching the 91.79% held-out test accuracy).
+
+**Consequence for the project:** `nc3_uncentred` absolute values are **not
+head-comparable** the way `nc3_centred` is. -0.88 at an unlearning-free
+ArcFace baseline is not evidence of anything related to forgetting -- it is
+present before there is a forget class to misalign. Once unlearning runs
+exist, read ArcFace's uncentred forget-class number as a **delta from this
+baseline**, not against the theory's raw -1 prediction, or the comparison
+silently inherits a head-specific offset that has nothing to do with
+unlearning. `nc3_centred` (which strips the shared component by
+construction) is the safer head-to-head comparison and already shows CE and
+ArcFace starting from essentially the same place (0.9612 vs 0.9619) -- a
+good baseline-matched starting point for the unlearning experiments.
+
+**Not a code bug** -- `nc3_alignment` computes exactly what its docstring
+says it computes; verified per-sample cosine averaging gives the same
+answer as cosine-of-the-mean (-0.879 vs -0.880), and normalised-feature
+class means give the same result too (-0.880), which rules out a
+magnitude-weighting artifact in the mean.
+
+**Action:** none taken to metrics.py -- this is a fact about the two loss
+functions' baseline geometry, not a defect to fix. Recorded here so week 3+
+unlearning results are read against the right reference point per head.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
