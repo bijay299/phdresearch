@@ -71,6 +71,26 @@ def nc1_within_class_variability(features: np.ndarray, labels: np.ndarray,
     return float(within / (between + 1e-12))
 
 
+def nc1_angular(features: np.ndarray, labels: np.ndarray, num_classes: int) -> float:
+    """
+    Angular (L2-normalised) variant of nc1_within_class_variability.
+
+    Raw NC1 is a ratio of squared-distance scatters, so it moves if a
+    sample's feature magnitude changes even when its direction does not.
+    Margin-based heads (ArcFace/CosFace) constrain direction only -- they
+    normalise both features and weights before comparing them -- so a
+    magnitude-sensitive NC1 can show "collapse" that is really just norm
+    growth. Normalising every feature to unit length before computing the
+    same ratio removes that sensitivity; what is left is variability in
+    direction alone, which is what these heads can actually be judged on.
+
+    Report alongside raw nc1, the same way nc3 is reported both centred and
+    uncentred: they answer different questions and neither replaces the
+    other.
+    """
+    return nc1_within_class_variability(_l2(features), labels, num_classes)
+
+
 def nc2_simplex_etf(features: np.ndarray, labels: np.ndarray, num_classes: int) -> float:
     """
     Deviation of centred, normalised class means from a simplex ETF.
@@ -299,6 +319,7 @@ class Report:
     verif_auc: float = float("nan")
     verif_auc_forget: float = float("nan")
     nc1: float = float("nan")
+    nc1_angular: float = float("nan")
     nc2: float = float("nan")
     nc3_forget: float = float("nan")
     nc3_retain_mean: float = float("nan")

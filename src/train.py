@@ -123,6 +123,12 @@ def evaluate(backbone: nn.Module, head: nn.Module,
     theoretical claim. Reporting one without saying which invites a reviewer
     to recompute it the other way and think you erred.
 
+    NC1 is likewise reported BOTH raw and angular (L2-normalised features).
+    Raw NC1 is sensitive to feature magnitude; angular NC1 is not. Margin
+    heads normalise features before comparing them, so magnitude changes
+    that raw NC1 would read as "collapse" are invisible to what those heads
+    actually optimise. Report both.
+
     When a forget class exists, the centred version excludes it from the
     centring reference. Without that, one flipped weight drags every retained
     class's score down by several points and it looks like real spillover.
@@ -157,6 +163,7 @@ def evaluate(backbone: nn.Module, head: nn.Module,
         "verif_auc": verif["auc"],
         "verif_auc_forget": verif.get("auc_forget", float("nan")),
         "nc1": M.nc1_within_class_variability(f_tr, y_tr, num_classes),
+        "nc1_angular": M.nc1_angular(f_tr, y_tr, num_classes),
         "nc2": M.nc2_simplex_etf(f_tr, y_tr, num_classes),
         "nc3_centred_mean": nc3_c["mean"],
         "nc3_uncentred_mean": nc3_u["mean"],

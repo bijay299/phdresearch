@@ -76,6 +76,26 @@ def test_nc1_nc2_sane():
     check("nc2 finite", np.isfinite(M.nc2_simplex_etf(f1, l1, K)))
 
 
+def test_nc1_angular_scale_invariant():
+    """The bug angular NC1 exists to avoid: a per-sample magnitude change
+    with no change in direction should not look like a change in collapse."""
+    print("nc1_angular: invariant to per-sample feature magnitude, raw nc1 is not")
+    f, l, _, K = collapsed_model()
+    rng = np.random.default_rng(2)
+    scale = rng.uniform(0.1, 10.0, size=(f.shape[0], 1))
+    f_scaled = f * scale
+
+    raw_orig = M.nc1_within_class_variability(f, l, K)
+    raw_scaled = M.nc1_within_class_variability(f_scaled, l, K)
+    ang_orig = M.nc1_angular(f, l, K)
+    ang_scaled = M.nc1_angular(f_scaled, l, K)
+
+    check(f"raw nc1 changes under per-sample scaling ({raw_orig:.4f} -> {raw_scaled:.4f})",
+          abs(raw_orig - raw_scaled) > 1e-6)
+    check(f"angular nc1 unchanged under per-sample scaling ({ang_orig:.6f} -> {ang_scaled:.6f})",
+          abs(ang_orig - ang_scaled) < 1e-9)
+
+
 def test_probe_and_ncc():
     print("probe / ncc: recover a separable class")
     f, l, _, K = collapsed_model()
