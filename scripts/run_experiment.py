@@ -150,6 +150,36 @@ def run(cfg: dict, smoke: bool = False) -> None:
     if u.get("classifier_only_diagnostic", True):
         variants.append(True)
 
+    traj_every = u.get("trajectory_every", 1)
+
+    def make_epoch_eval(tag: str):
+        """
+        Trajectory point every `trajectory_every` epochs of unlearning, not
+        just at the end -- see notes/decisions.md 2026-09-13: ArcFace
+        finetune reaches output_forget=0 by epoch 3 while CE is still at
+        0.662 after 30, so a table read at one fixed epoch count compares
+        methods at different points on their own trajectories. Written to
+        trajectory.jsonl so a later analysis can line heads up at matched
+        output_forget instead.
+
+        Epoch 0 (the shared pre-unlearning starting point) and the final
+        configured epoch are always evaluated, regardless of the interval,
+        so the curve never silently drops its endpoints.
+        """
+        def _epoch_eval(bb, hd, epoch):
+            if epoch not in (0, u["epochs"]) and epoch % traj_every != 0:
+                return
+            point = TR.evaluate_light(bb, hd, train_eval_loader, test_loader,
+                                      num_classes, device,
+                                      forget_class=u["forget_class"],
+                                      seed=cfg["seed"])
+            rd.append_jsonl("trajectory.jsonl", {
+                "head": head_name, "method": tag,
+                "forget_class": u["forget_class"], "seed": cfg["seed"],
+                "epoch": epoch, **point,
+            })
+        return _epoch_eval
+
     for method in u["methods"]:
         for clf_only in variants:
             tag = f"{method}{'_clfonly' if clf_only else ''}"
@@ -157,7 +187,8 @@ def run(cfg: dict, smoke: bool = False) -> None:
 
             kwargs = dict(epochs=u["epochs"], lr=u["lr"],
                           weight_decay=u["weight_decay"],
-                          classifier_only=clf_only, log=rd.log)
+                          classifier_only=clf_only, log=rd.log,
+                          epoch_eval=make_epoch_eval(tag))
             if method in ("finetune",):
                 kwargs["retain_loader"] = retain_loader
             elif method in ("neggrad",):

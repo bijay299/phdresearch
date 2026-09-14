@@ -44,3 +44,8 @@ unlearn:
   epochs: 3
   lr: 0.001
   weight_decay: 0.0005
+  trajectory_every: 1   # evaluate the per-epoch trajectory every N epochs;
+                        # epoch 0 and the final epoch are always evaluated
+                        # regardless. Raise this once epochs go past ~10-20
+                        # -- a fresh linear-probe fit every epoch is the
+                        # trajectory's dominant cost.

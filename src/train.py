@@ -105,6 +105,49 @@ def output_accuracy(labels: np.ndarray, preds: np.ndarray,
     return out
 
 
+def evaluate_light(backbone: nn.Module, head: nn.Module,
+                   train_eval_loader: DataLoader, test_loader: DataLoader,
+                   num_classes: int, device: str, forget_class: int,
+                   seed: int = 0) -> Dict:
+    """
+    A cheap subset of `evaluate()`, for tracking one point on an unlearning
+    TRAJECTORY (measured every epoch) rather than only the end-of-run row.
+
+    Two heads reaching output_forget=0 at very different epoch counts (see
+    notes/decisions.md, 2026-09-13) means a comparison table built at a
+    fixed epoch count is comparing methods at different points on their own
+    trajectories. Recording a point every epoch lets a later analysis line
+    heads up at matched output_forget instead of matched epoch count.
+
+    Only the quantities needed for that: output_forget, output_retain,
+    probe_forget, nc3_centred_forget, nc1_angular. Skips ncc, verif_auc,
+    nc2, raw nc1, and nc3 uncentred -- those stay end-of-run only (via
+    `evaluate`), because running a full evaluation (in particular fitting a
+    fresh linear probe) at every epoch of every method would make the
+    unlearning phase cost several times what it costs today.
+
+    nc3 here is CENTRED, excluding the forget class from the centring
+    reference -- same convention as `evaluate`, not the uncentred one
+    `--compare` prints (see notes/decisions.md, centring contamination).
+    """
+    f_tr, y_tr, p_tr = extract(backbone, head, train_eval_loader, device)
+    f_te, y_te, p_te = extract(backbone, head, test_loader, device)
+
+    out_acc = output_accuracy(y_te, p_te, forget_class)
+    probe = M.linear_probe(f_tr, y_tr, f_te, y_te, target_class=forget_class, seed=seed)
+    W = head.weight.detach().cpu().numpy()
+    nc3_c = M.nc3_alignment(f_tr, y_tr, W, num_classes, centre=True,
+                            exclude_from_centre=forget_class)
+
+    return {
+        "output_forget": out_acc.get("forget", float("nan")),
+        "output_retain": out_acc.get("retain", float("nan")),
+        "probe_forget": probe.get("forget", float("nan")),
+        "nc3_centred_forget": nc3_c.get("forget", float("nan")),
+        "nc1_angular": M.nc1_angular(f_tr, y_tr, num_classes),
+    }
+
+
 def evaluate(backbone: nn.Module, head: nn.Module,
              train_eval_loader: DataLoader, test_loader: DataLoader,
              num_classes: int, device: str,

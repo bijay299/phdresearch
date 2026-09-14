@@ -25,6 +25,20 @@ Every method here calls `head(features, labels)` during unlearning, so the
 margin is applied under ArcFace/CosFace exactly as it is during training.
 That is deliberate. Whether the margin blocks the classifier-drift shortcut
 is the thing being tested -- do not disable it to make the methods "behave".
+
+Per-epoch trajectories
+-----------------------
+`finetune`, `neggrad`, `neggrad_plus` and `random_label` take an optional
+`epoch_eval(backbone, head, epoch)` callback, called once before any
+training (epoch 0, the shared pre-unlearning starting point) and once after
+every epoch -- unconditionally; it is the callback itself
+(`scripts/run_experiment.py`'s `make_epoch_eval`, governed by
+`unlearn.trajectory_every`) that decides whether a given epoch is cheap to
+skip. The caller uses this to write a trajectory file -- see
+notes/decisions.md, 2026-09-13: two heads can reach output_forget=0 at very
+different epoch counts, so a table built at one fixed epoch count compares
+methods at different points on their own trajectories, not at a matched
+outcome.
 """
 
 from __future__ import annotations
@@ -111,11 +125,15 @@ def retrain(backbone, head, retain_loader: DataLoader, device: str,
 
 def finetune(backbone, head, retain_loader: DataLoader, device: str,
              epochs: int = 5, lr: float = 0.01, weight_decay: float = 5e-4,
-             classifier_only: bool = False, log: Optional[Callable] = None, **_):
+             classifier_only: bool = False, log: Optional[Callable] = None,
+             epoch_eval: Optional[Callable] = None, **_):
     """Fine-tune on the retain set only. Forgetting happens by omission."""
     backbone, head = _clone(backbone, head)
     backbone.to(device); head.to(device)
     opt = _optimizer(_params(backbone, head, classifier_only), lr, weight_decay)
+
+    if epoch_eval:
+        epoch_eval(backbone, head, 0)
 
     for ep in range(epochs):
         if not classifier_only:
@@ -129,12 +147,15 @@ def finetune(backbone, head, retain_loader: DataLoader, device: str,
             tot += loss.item()
         if log:
             log(f"    finetune ep {ep+1}/{epochs}  loss {tot/max(len(retain_loader),1):.4f}")
+        if epoch_eval:
+            epoch_eval(backbone, head, ep + 1)
     return backbone, head
 
 
 def neggrad(backbone, head, forget_loader: DataLoader, device: str,
             epochs: int = 1, lr: float = 1e-4, weight_decay: float = 0.0,
-            classifier_only: bool = False, log: Optional[Callable] = None, **_):
+            classifier_only: bool = False, log: Optional[Callable] = None,
+            epoch_eval: Optional[Callable] = None, **_):
     """
     Pure gradient ascent on the forget set.
 
@@ -145,6 +166,9 @@ def neggrad(backbone, head, forget_loader: DataLoader, device: str,
     backbone, head = _clone(backbone, head)
     backbone.to(device); head.to(device)
     opt = _optimizer(_params(backbone, head, classifier_only), lr, weight_decay)
+
+    if epoch_eval:
+        epoch_eval(backbone, head, 0)
 
     for ep in range(epochs):
         if not classifier_only:
@@ -158,13 +182,16 @@ def neggrad(backbone, head, forget_loader: DataLoader, device: str,
             tot += loss.item()
         if log:
             log(f"    neggrad ep {ep+1}/{epochs}  loss {tot/max(len(forget_loader),1):.4f}")
+        if epoch_eval:
+            epoch_eval(backbone, head, ep + 1)
     return backbone, head
 
 
 def neggrad_plus(backbone, head, forget_loader: DataLoader, retain_loader: DataLoader,
                  device: str, epochs: int = 3, lr: float = 1e-3,
                  weight_decay: float = 5e-4, alpha: float = 1.0,
-                 classifier_only: bool = False, log: Optional[Callable] = None, **_):
+                 classifier_only: bool = False, log: Optional[Callable] = None,
+                 epoch_eval: Optional[Callable] = None, **_):
     """
     Ascent on forget, descent on retain, interleaved.
 
@@ -174,6 +201,9 @@ def neggrad_plus(backbone, head, forget_loader: DataLoader, retain_loader: DataL
     backbone, head = _clone(backbone, head)
     backbone.to(device); head.to(device)
     opt = _optimizer(_params(backbone, head, classifier_only), lr, weight_decay)
+
+    if epoch_eval:
+        epoch_eval(backbone, head, 0)
 
     for ep in range(epochs):
         if not classifier_only:
@@ -196,13 +226,16 @@ def neggrad_plus(backbone, head, forget_loader: DataLoader, retain_loader: DataL
             tot += loss.item(); n += 1
         if log:
             log(f"    neggrad+ ep {ep+1}/{epochs}  loss {tot/max(n,1):.4f}")
+        if epoch_eval:
+            epoch_eval(backbone, head, ep + 1)
     return backbone, head
 
 
 def random_label(backbone, head, forget_loader: DataLoader, retain_loader: DataLoader,
                  device: str, num_classes: int, epochs: int = 3, lr: float = 1e-3,
                  weight_decay: float = 5e-4, classifier_only: bool = False,
-                 exclude_true: bool = True, log: Optional[Callable] = None, **_):
+                 exclude_true: bool = True, log: Optional[Callable] = None,
+                 epoch_eval: Optional[Callable] = None, **_):
     """
     Relabel forget samples uniformly at random, then fine-tune normally.
 
@@ -213,6 +246,9 @@ def random_label(backbone, head, forget_loader: DataLoader, retain_loader: DataL
     backbone, head = _clone(backbone, head)
     backbone.to(device); head.to(device)
     opt = _optimizer(_params(backbone, head, classifier_only), lr, weight_decay)
+
+    if epoch_eval:
+        epoch_eval(backbone, head, 0)
 
     for ep in range(epochs):
         if not classifier_only:
@@ -243,6 +279,8 @@ def random_label(backbone, head, forget_loader: DataLoader, retain_loader: DataL
             tot += loss.item(); n += 1
         if log:
             log(f"    random_label ep {ep+1}/{epochs}  loss {tot/max(n,1):.4f}")
+        if epoch_eval:
+            epoch_eval(backbone, head, ep + 1)
     return backbone, head
 
 

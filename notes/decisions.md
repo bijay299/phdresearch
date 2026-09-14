@@ -427,6 +427,113 @@ the methods were at different points on their trajectories.
 
 ---
 
+## 2026-09-13 — Full per-epoch trajectories run for both heads; matched-output_forget comparison
+
+Ran with the new per-epoch trajectory instrumentation:
+
+    python scripts/run_experiment.py --config configs/cifar_ce.yaml --set unlearn.enabled=true
+    python scripts/run_experiment.py --config configs/cifar_arcface.yaml --set unlearn.enabled=true
+
+then, because CE `finetune` never reached output_forget=0 at the configured
+3 epochs, a CE-only extension:
+
+    python scripts/run_experiment.py --config configs/cifar_ce.yaml --set \
+      unlearn.enabled=true unlearn.epochs=30 unlearn.trajectory_every=5 \
+      unlearn.methods=[finetune] unlearn.retrain_reference=false
+
+(`neggrad_plus`/`random_label` already converged within 1-2 epochs and
+didn't need the extension; `retrain_reference` skipped since that reference
+was already on record. ArcFace was not touched.)
+
+**Housekeeping:** `logs/cifar10_ce_seed0/` and `logs/cifar10_arcface_seed0/`
+are fixed-name directories reused across runs -- `RunDir` appends rather
+than overwrites `results.jsonl`, so each of these three invocations left
+duplicate `original`/method rows behind. Deduplicated after each run,
+keeping the latest occurrence per (method, forget_class). One consequence
+worth flagging: `results.jsonl`'s `finetune`/`finetune_clfonly` rows for CE
+now reflect the 30-epoch extension, not the original 3-epoch config --
+`trajectory.jsonl` has the full epoch-by-epoch record either way, and
+`--compare` only ever reads the end-of-run row, so this doesn't silently
+mismatch epoch counts between heads there, but it does mean CE's
+`results.jsonl` row is no longer "3 epochs, same as everything else" the
+way `base.yaml` implies. Worth a comment in the config if this trips
+anyone up later.
+
+### Epoch at which output_forget first hits 0.0, and the geometry there
+
+| head | method | first ep @ 0.0 | nc3_centred_forget | nc1_angular | output_retain |
+|---|---|---|---|---|---|
+| CE | finetune | never (0.659 @ ep30) | -- | -- | -- |
+| CE | finetune_clfonly | never (0.894 @ ep30) | -- | -- | -- |
+| CE | neggrad_plus | 1 | +0.672 | 21.03 | 0.111 (chance) |
+| CE | neggrad_plus_clfonly | 2 | -0.722 | 0.223 | 0.343 |
+| CE | random_label | 2 | +0.395 | 0.497 | 0.921 |
+| CE | random_label_clfonly | 1 | +0.409 | 0.223 | 0.936 |
+| ArcFace | finetune | 1 | +0.846 | 0.051 | 0.937 |
+| ArcFace | finetune_clfonly | 1 | +0.917 | 0.064 | 0.924 |
+| ArcFace | neggrad_plus | 1 | +0.443 | 36.37 | 0.111 (chance) |
+| ArcFace | neggrad_plus_clfonly | 1 | -0.868 | 0.064 | 0.111 (chance; recovers to 0.816 by ep3) |
+| ArcFace | random_label | 1 | +0.850 | 0.142 | 0.928 |
+| ArcFace | random_label_clfonly | 1 | -0.821 | 0.064 | 0.924 |
+
+CE `finetune` extended to 30 epochs, logged every 5: 0.939 (ep0) -> 0.826
+(ep5) -> 0.761 (ep10) -> 0.732 (ep15) -> 0.726 (ep20) -> 0.680 (ep25) ->
+0.659 (ep30). The decay is flattening, not accelerating -- 10x the epoch
+budget closed less than a third of the gap to zero. `finetune_clfonly`
+bottoms out even higher, at 0.894.
+
+### Matched comparison -- geometry at equal output-level forgetting
+
+**Not matchable: `finetune` / `finetune_clfonly`.** CE never reaches
+output_forget=0.0 within 30 epochs under either variant, so there is no
+epoch to line up against ArcFace's epoch-1 collapse. Whether CE asymptotes
+above zero or would eventually reach it given far more epochs is untested
+-- the trajectory only shows it flattening, not approaching zero.
+
+**Matchable but confounded: `neggrad_plus` (full model).** Both heads hit
+output_forget=0.0 at epoch 1, but `output_retain` has collapsed to chance
+(~0.11) for *both*. The geometry at this point (nc1_angular exploded to
+21-36, meaning within-class scatter, not classifier drift, dominates)
+reflects the whole model having broken, not a clean forgetting signal.
+Not usable evidence for or against the mechanism.
+
+**Matchable, clean: `random_label` (full model).** CE ep2 vs ArcFace ep1,
+both retain healthy (0.921 / 0.928). Neither shows the AISTATS drift --
+both stay positively aligned with the class mean (CE +0.395, ArcFace
++0.850). Consistent with random_label leaving geometry essentially
+untouched under either head.
+
+**Matchable, clean, and the sharpest result: `random_label_clfonly`.** CE
+ep1 vs ArcFace ep1, both retain healthy (0.936 / 0.924), backbone frozen in
+both so class-mean features cannot move -- any nc3 change is attributable
+to the classifier alone. **CE stays aligned (+0.409); ArcFace flips
+negative (-0.821).** At a matched, healthy, output-level outcome, ArcFace's
+classifier demonstrably drifts away from the class mean while CE's does
+not. This is the cleanest evidence so far for a real head-level difference
+in mechanism, not just in rate.
+
+**Matchable, mixed: `neggrad_plus_clfonly`.** CE ep2 vs ArcFace ep1, both
+flip negative (-0.722 / -0.868 -- the drift mechanism shows up in both
+heads here), but retain utility differs sharply at the matched point (CE
+0.343 vs ArcFace 0.111, chance). ArcFace's frozen-backbone classifier
+transiently collapses retain accuracy to chance at epoch 1 then recovers to
+0.816 by epoch 3 -- a non-monotonic dynamic the per-epoch trajectory
+surfaces that an end-of-run-only view would have missed entirely.
+
+**Headline:** the one case that isolates classifier movement from backbone
+movement and holds output-level outcome AND retain utility fixed across
+heads (`random_label_clfonly`) shows ArcFace's classifier flipping away
+from the class mean while CE's does not. That is the AISTATS mechanism
+appearing under ArcFace and not under CE, in the cleanest condition
+available so far. Everything else is either not yet matchable
+(`finetune`) or confounded by model collapse (`neggrad_plus` variants).
+One clean matched pair is not a paper-level result on its own -- next
+step is checking whether this holds at other forget classes and, ideally,
+finding a way to get CE `finetune` to actually reach output_forget=0 so
+that pair becomes comparable too.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
