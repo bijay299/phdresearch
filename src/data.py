@@ -328,17 +328,38 @@ def nearest_identities(class_means: np.ndarray, target: int, k: int = 5) -> np.n
 # builders
 # ----------------------------------------------------------------------
 
-def build_datasets(cfg: dict, log: Optional[Callable] = None):
+def build_datasets(cfg: dict, seed: int = 0, log: Optional[Callable] = None):
     """Returns (train, train_eval, test, num_classes).
+
+    `cfg` is the `data` sub-dict; `seed` is the EXPERIMENT seed and is the
+    ONLY source of face sampling and split randomness. It used to be read as
+    `cfg.get("seed", 0)` from this sub-dict -- which no config has ever set,
+    so faces identity/image subsampling and `stratified_image_split` were
+    pinned to seed 0 however `seed` was set at the top level or via
+    `--set seed=N`. Passing it as an argument keeps one seed in the config
+    schema instead of duplicating it under `data`.
+
+    A `seed` key inside `cfg` is rejected rather than honoured: two places to
+    set one seed is how the original defect hid. Splitting the data seed from
+    the training seed may turn out to be worth doing, but it is a design
+    decision to take deliberately, not something to fall into via an override.
 
     `train_eval` is the training set with EVAL transforms -- needed for clean
     feature extraction. Extracting features under random crops and flips
     would add noise to every geometry measurement. It indexes the SAME images
     as `train`, in the same order, so index i means one image under both.
     """
+    if "seed" in cfg:
+        raise ValueError(
+            "data.seed is not supported: the experiment seed is the only "
+            "source of sampling and split randomness. Remove `seed` from the "
+            "`data` config block and set the top-level `seed` instead "
+            "(e.g. --set seed=1). A separate data/split seed would need an "
+            "explicit design decision first."
+        )
+
     name = cfg["name"].lower()
     root = cfg.get("root", "./data")
-    seed = cfg.get("seed", 0)
 
     if name in ("cifar10", "cifar100"):
         cls = torchvision.datasets.CIFAR10 if name == "cifar10" else torchvision.datasets.CIFAR100

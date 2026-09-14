@@ -293,6 +293,133 @@ def test_stratified_image_split_rejects_single_image_identity():
         check(f"raised ValueError ({str(e)[:40]}...)", True)
 
 
+def _faces_cfg(root, max_images_per_identity=8):
+    """The `data` sub-dict as a faces config resolves it. Deliberately has NO
+    `seed` key -- that absence is what the defect below turned on."""
+    return {"name": "faces", "root": root, "image_size": 8, "min_images": 1,
+            "max_images_per_identity": max_images_per_identity,
+            "test_fraction": 0.25}
+
+
+def _selection_and_split(root, seed=None, per_identity=12):
+    """Build through the real entry point and return what the seed controls:
+    the subsampled file list, and the train/test partition over it."""
+    cfg = _faces_cfg(root)
+    if seed is None:
+        train, _, test, _ = D.build_datasets(cfg)          # default path
+    else:
+        train, _, test, _ = D.build_datasets(cfg, seed=seed)
+    files = tuple(str(p) for p, _ in train.dataset.samples)
+    return files, tuple(train.indices.tolist()), tuple(test.indices.tolist()), train, test
+
+
+def test_old_data_seed_lookup_was_pinned_to_zero():
+    """Negative case for the fix below: the previous code read the seed as
+    `cfg.get("seed", 0)` off the `data` sub-dict. No config sets `data.seed`,
+    so every experiment seed resolved to 0. If this ever stops holding, the
+    schema changed and the regression tests below need revisiting."""
+    print("old behaviour: data-local seed lookup ignored the experiment seed")
+    cfg = _faces_cfg("/nonexistent")
+    check("no config-shaped data dict carries a seed key", "seed" not in cfg)
+    resolved = [cfg.get("seed", 0) for _ in (0, 1, 2, 7)]
+    check("old lookup returned 0 for every experiment seed", resolved == [0, 0, 0, 0])
+
+
+def test_build_datasets_rejects_a_nested_data_seed():
+    """The experiment seed is the SOLE source of sampling/split randomness.
+    A stray `data.seed` must fail loudly rather than silently overriding it --
+    two places to set one seed is exactly how the original defect hid. Checked
+    before any dataset is touched, so it fires for every dataset name."""
+    print("build_datasets: a nested data.seed is rejected, never honoured")
+    cfg = _faces_cfg("/nonexistent")
+    cfg["seed"] = 7
+    for name, passed in (("faces", 1), ("cifar10", 1), ("faces", None)):
+        cfg["name"] = name
+        try:
+            if passed is None:
+                D.build_datasets(cfg)
+            else:
+                D.build_datasets(cfg, seed=passed)
+            check(f"{name}: raised ValueError", False)
+        except ValueError as e:
+            msg = str(e)
+            check(f"{name}: raised ValueError ({msg[:34]}...)", True)
+            check(f"{name}: message names data.seed", "data.seed" in msg)
+            check(f"{name}: message points at the top-level seed",
+                  "top-level" in msg and "--set seed=" in msg)
+    # It must fail rather than fall through to loading, even though the root
+    # does not exist -- i.e. the check runs before FileNotFoundError could.
+    check("rejection precedes any dataset access", True)
+
+
+def test_build_datasets_seed_reaches_face_sampling_and_split():
+    """The fix: the experiment seed is an argument, and it reaches BOTH
+    FaceFolder's per-identity image subsampling and stratified_image_split.
+    12 images per identity capped to 8 means the selection is a real random
+    choice, not the whole directory."""
+    print("build_datasets: the experiment seed reaches faces sampling and split")
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        _tiny_face_dir(tmp, per_identity=12)
+
+        f0a, tr0a, te0a, _, _ = _selection_and_split(tmp, seed=0)
+        f0b, tr0b, te0b, _, _ = _selection_and_split(tmp, seed=0)
+        f1, tr1, te1, _, _ = _selection_and_split(tmp, seed=1)
+
+        check("subsampling actually engaged (8 of 12 kept per identity)",
+              len(f0a) == 3 * 8)
+        check("same seed -> identical selected samples", f0a == f0b)
+        check("same seed -> identical train partition", tr0a == tr0b)
+        check("same seed -> identical test partition", te0a == te0b)
+        check("different seed -> different selection or partition",
+              (f1 != f0a) or (tr1 != tr0a) or (te1 != te0a))
+
+
+def test_build_datasets_default_seed_reproduces_seed_zero():
+    """Compatibility: every existing faces run was seed 0, and the default
+    argument must still produce exactly what those runs saw."""
+    print("build_datasets: the default seed still reproduces seed 0 exactly")
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        _tiny_face_dir(tmp, per_identity=12)
+
+        fd, trd, ted, _, _ = _selection_and_split(tmp, seed=None)
+        f0, tr0, te0, _, _ = _selection_and_split(tmp, seed=0)
+
+        check("default selection == seed 0 selection", fd == f0)
+        check("default train partition == seed 0", trd == tr0)
+        check("default test partition == seed 0", ted == te0)
+
+
+def test_build_datasets_split_stays_sound_at_every_seed():
+    """Whatever the seed does to the selection, the split invariants hold:
+    disjoint sides, every identity on both, one shared label mapping."""
+    print("build_datasets: disjoint, identity-complete, label-consistent at every seed")
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        _tiny_face_dir(tmp, per_identity=12)
+
+        for seed in (0, 1, 2, 7):
+            _, tr, te, train, test = _selection_and_split(tmp, seed=seed)
+            tr_targets = D.get_targets(train)
+            te_targets = D.get_targets(test)
+
+            check(f"seed {seed}: no image in both splits", not (set(tr) & set(te)))
+            check(f"seed {seed}: every identity on both sides",
+                  set(tr_targets.tolist()) == set(te_targets.tolist()) == {0, 1, 2})
+            check(f"seed {seed}: both splits share one identity_names mapping",
+                  train.dataset.identity_names is test.dataset.identity_names)
+            check(f"seed {seed}: mapping is the sorted directory names",
+                  train.dataset.identity_names == ["alice", "bob", "carol"])
+            # Labels must still resolve through the shared scan: the target of
+            # index i is the label stored beside that image, on both sides.
+            samples = train.dataset.samples
+            check(f"seed {seed}: train labels match the shared sample table",
+                  all(samples[i][1] == t for i, t in zip(tr, tr_targets.tolist())))
+            check(f"seed {seed}: test labels match the shared sample table",
+                  all(samples[i][1] == t for i, t in zip(te, te_targets.tolist())))
+
+
 def test_restrict_split_preserves_disjointness():
     print("restrict_split: forget/retain/held-out stay disjoint after restriction")
     targets = synthetic_targets(num_classes=10, per_class=100)

@@ -46,7 +46,8 @@ def main(cfg: dict, forget_classes: list[int]) -> None:
     set_seed(cfg["seed"])
     device = resolve_device(cfg.get("device", "auto"))
 
-    train_ds, train_eval_ds, test_ds, num_classes = D.build_datasets(cfg["data"])
+    train_ds, train_eval_ds, test_ds, num_classes = D.build_datasets(cfg["data"],
+                                                                     seed=cfg["seed"])
     targets = D.get_targets(train_ds)
 
     bs, nw = cfg["data"]["batch_size"], cfg["data"]["num_workers"]

@@ -1113,6 +1113,56 @@ fixed.
 
 ---
 
+## 2026-09-14 — Face dataset seed never reached sampling or splitting; fixed
+
+**Supersedes** the parenthetical in the entry above that says a faces seed
+replication is blocked. It is no longer blocked.
+
+**The defect.** `build_datasets` resolved its seed as `cfg.get("seed", 0)`,
+where `cfg` is the **`data` sub-dict**. No config has ever set `data.seed` --
+the seed lives at the top level of the config -- so the lookup fell through
+to the default on every run. Both consumers of that value are faces-only:
+`FaceFolder`'s per-identity image subsampling (`max_images_per_identity`,
+`rng.choice`) and `stratified_image_split`. **Every face run therefore used
+seed 0 for sampling and splitting, and `--set seed=1` would have changed the
+weight init and the training shuffle while silently reusing the seed-0
+split.** Nothing crashes and nothing logs a warning; the run just reports
+the seed it was asked for.
+
+**The fix, and the contract.** `build_datasets(cfg, seed=0, log=None)`: the
+experiment seed is an explicit argument and the **sole** source of sampling
+and split randomness. All three call sites pass `seed=cfg["seed"]`
+(`run_experiment.py`, `unlearn_across_classes.py`, `retrain_stability.py`).
+A `seed` key inside the `data` block is now **rejected with an error**
+pointing at the top-level seed, not honoured as an override -- two places to
+set one seed is how this defect hid in the first place. A separate data/split
+seed may be worth having, but that is a design decision to take deliberately;
+it is not available today.
+
+**Existing results are unaffected.** Every faces and faces-100 run was seed 0
+(`config.json`, all 18 run directories) and the default reproduces seed-0
+sampling and splitting exactly. No recorded number changes; no rerun needed.
+CIFAR never touched this path -- that branch uses torchvision's fixed split
+and never reads `seed`.
+
+**Going forward**, a faces seed replication gets genuinely different
+subsampling *and* a different train/test partition. State that when reporting
+one: seed 0 and seed 1 will differ in which images were extracted per
+identity as well as in initialisation, so the two are not a paired comparison
+over one fixed sample.
+
+**Validation** -- five CPU-only groups in `src/test_data.py`, on a synthetic
+3-identity directory with 12 images each capped to 8 so the subsampling is a
+real random choice: the negative case (old lookup returned 0 for every
+experiment seed); equal seeds give identical selected samples and identical
+partitions; a different seed changes the selection or the partition; the
+default still equals seed 0; a stray `data.seed` raises for faces and CIFAR
+alike, before any dataset is touched; and at seeds 0/1/2/7 the split stays
+disjoint, identity-complete, and label-consistent through one shared scan.
+`src/test_data.py` 12 -> 17 groups; `make test` 30 -> 35.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO

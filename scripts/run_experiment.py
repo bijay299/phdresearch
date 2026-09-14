@@ -69,6 +69,7 @@ def run(cfg: dict, smoke: bool = False) -> None:
 
     # ---- data -------------------------------------------------------
     train_ds, train_eval_ds, test_ds, num_classes = D.build_datasets(cfg["data"],
+                                                                     seed=cfg["seed"],
                                                                      log=rd.log)
     targets = D.get_targets(train_ds)
     rd.log(f"classes: {num_classes}   train: {len(train_ds)}   test: {len(test_ds)}")

@@ -149,7 +149,8 @@ def main(cfg: dict, forget_classes: list[int], ckpt_path: Path,
                             # own convention: RNG evolves naturally across
                             # the conditions that follow, not reset per one
 
-    train_ds, train_eval_ds, test_ds, num_classes = D.build_datasets(cfg["data"])
+    train_ds, train_eval_ds, test_ds, num_classes = D.build_datasets(cfg["data"],
+                                                                     seed=cfg["seed"])
     bs, nw = cfg["data"]["batch_size"], cfg["data"]["num_workers"]
     train_eval_loader = D.make_loader(train_eval_ds, None, 512, False, nw)
     test_loader = D.make_loader(test_ds, None, 512, False, nw)
