@@ -1251,6 +1251,145 @@ methods, other seeds. This was a scoped re-verification of one condition.
 
 ---
 
+## 2026-09-14 — CIFAR ArcFace seed-0 rebuilt post-fix; the last 3 pre-fix points are gone, 16/16 holds
+
+**Decided:** The three ArcFace seed-0 points flagged as still pre-fix in the
+entry above (fc1/fc2/fc3) are now replaced by post-fix runs, and the
+seed-0 retrain references are rebuilt on the same footing. The 16/16
+directional claim is quotable: **all 16 canonical points are now valid
+under the corrected schedule: all eight ArcFace points were run post-fix,
+while all eight CE points were unaffected because CE uses no warmup.** No
+pre-fix artifact was modified or reused.
+
+**Provenance.** A clean seed-0 ArcFace baseline was trained from scratch
+into a fresh tree (`logs/postfix_seed0_clean/`), its four
+`random_label_clfonly` classes run from that checkpoint, and four
+retrain references built independently in
+`logs/retrain_postfix_arcface_seed0/`. All **9** run directories record
+`git_commit: 6015e37`, all end at **lr 0.00000**, all log `run complete`.
+Workstream A ran on GPU 0, workstream B on GPU 1; GPUs 2-3 belonged to
+another user and were not touched. The two out_dirs are disjoint, so no
+`RunDir` target was contended.
+
+**Baseline fairness versus CE holds at seed 0.** The clean baseline
+reproduces the existing post-fix seed-0 run to four decimals — test
+accuracy **0.9341**, nc1 1.1107, nc2 0.0467, nc3_centred_mean 0.9617,
+nc3_uncentred_mean -0.8786, identical to `logs/cifar10_arcface_seed0`.
+CE seed-0 is 0.9336, so the heads match to **0.05pp**, the same parity
+already established at seed 1. The geometry comparison below is not
+confounded by one head being the weaker model.
+
+**`random_label_clfonly`, ArcFace, seed 0, post-fix** (frozen backbone, so
+any nc3 movement is the classifier alone). `output_forget` is 0.0000 at
+every epoch >= 1 in all four classes:
+
+| fc | ep0 nc3_c | ep1 nc3_c | final nc3_c | final nc3_u | out_retain | test_acc |
+|---|---|---|---|---|---|---|
+| 0 | +0.9692 | **-0.9109** | -0.9427 | -0.9809 | 0.9380 | 0.8442 |
+| 1 | +0.9585 | **-0.9133** | -0.9459 | -0.9812 | 0.9326 | 0.8393 |
+| 2 | +0.9528 | **-0.7893** | -0.8236 | -0.9809 | 0.9427 | 0.8484 |
+| 3 | +0.9695 | **-0.9452** | -0.9539 | -0.9812 | 0.9538 | 0.8584 |
+
+Both conventions are reported per CLAUDE.md: `nc3_c` is centred with
+`exclude_from_centre=<forget_class>`, `nc3_u` uncentred — the convention
+the theory's prediction is actually about, and where all four land at
+-0.981. Retain-class alignment stays high
+(`nc3_centred_retain_mean` +0.9599 to +0.9630) and `output_retain`
+0.9326-0.9538 against a 0.9341 baseline, so nothing collapsed to buy the
+forgetting.
+
+**fc1 and fc3 came back unchanged in sign and close in magnitude; fc2
+moved.** Pre-fix seed-0 ep1 values were fc1 -0.7891, fc2 -0.9600, fc3
+-0.9403. Post-fix they are fc1 -0.9133, fc2 -0.7893, fc3 -0.9452. fc1
+strengthened, fc3 is flat, and **fc2 weakened** — it is now the softest of
+the four rather than the firmest. Note this is the opposite direction from
+the seed-1 story, where fixing the LR bug *rescued* fc2 from -0.6782 to
+-0.8647. So fc2's position within the family is not stable across seeds,
+and the earlier reading that fc2 is intrinsically the weak class does not
+survive either. What is stable is the sign: fc2 is comfortably negative in
+both seeds post-fix. The seed-0 post-fix ep1 spread is 0.156
+(-0.7893..-0.9452), wider than seed 1's 0.067.
+
+**Does the 16/16 directional claim survive? Yes. All 16 canonical points
+are now valid under the corrected schedule: all eight ArcFace points were
+run post-fix, while all eight CE points were unaffected because CE uses no
+warmup.** All 4 ArcFace seed-0 points flip negative at epoch 1; all 4 CE
+seed-0 points stay positive (+0.4085, +0.4655, +0.4306, +0.4331, re-read
+from `trajectory.jsonl`). With the 8 seed-1 points from the entry above,
+that is 16/16 — and the **3 pre-fix holdouts named there are now retired.**
+
+**Retrain references, ArcFace seed-0, post-fix** (fresh backbone+head on
+retain-only; the comparison point every probe gap is measured against):
+
+| fc | probe_forget | out_forget | out_retain | test_acc | nc3_c fgt | nc3_u fgt |
+|---|---|---|---|---|---|---|
+| 0 | 0.6030 | 0.0000 | 0.9352 | 0.8417 | -0.9914 | -0.9925 |
+| 1 | 0.5950 | 0.0000 | 0.9310 | 0.8379 | -0.7681 | -0.9753 |
+| 2 | 0.5440 | 0.0000 | 0.9390 | 0.8451 | -0.9952 | -0.9961 |
+| 3 | 0.5680 | 0.0000 | 0.9484 | 0.8536 | -0.9736 | -0.9856 |
+
+The reference is stable across classes: probe_forget mean **0.5775**, sd
+0.0269, range 0.059. That answers the worry `retrain_stability.py` was
+written for — the fc0 value is not a fluke, so gaps measured against it
+are trustworthy.
+
+**Probe gap to retrain** — *our arithmetic (unlearned `probe_forget` minus
+retrain `probe_forget`), not a metric from the AISTATS paper.* Computed
+only from the seed-0 post-fix artifacts listed above; no pre-fix or
+cross-seed number enters it:
+
+| fc | unlearned | retrain | gap |
+|---|---|---|---|
+| 0 | 0.9410 | 0.6030 | **+0.3380** |
+| 1 | 0.9760 | 0.5950 | **+0.3810** |
+| 2 | 0.9160 | 0.5440 | **+0.3720** |
+| 3 | 0.8560 | 0.5680 | **+0.2880** |
+
+Mean **+0.345**, sd 0.042. The gap is large and consistent at all four
+classes.
+
+**Scientific verdict, updated.** Under ArcFace the classifier weight flips
+hard away from the class mean (uncentred -0.981 at every class, both
+seeds) while the features of the forget class remain **substantially more
+linearly decodable than after retraining** — a probe gap of roughly 35
+points against the retrained reference. That is a statement about how much
+class information a linear probe can still recover, not a demonstration
+that the representation was left unchanged; these runs do not measure
+feature movement directly, and the margin loss may well have moved the
+features without closing the probe gap. The result is consistent with the
+output-level illusion described by Gao et al., but direct equivalence
+remains unverified until their reference implementation is reproduced. The
+premise that normalisation closes the shortcut is **not supported on
+CIFAR-10** — outcome (2) from CLAUDE.md is not what happened, and outcome
+(1) is not supported by the probe gap. Note also that the
+retrain references themselves sit at nc3_c -0.77 to -0.995, i.e. a
+genuinely retrained model also has a strongly anti-aligned weight for a
+class it never saw, so the flip alone does not distinguish unlearning from
+retraining — the probe gap is what does. This matches the faces result
+(2026-09-14) in direction of conclusion though not in mechanism, where
+ArcFace did not flip at all.
+
+**Limitations.**
+- `evaluate_light` writes only `nc3_centred_forget` to `trajectory.jsonl`,
+  so the **epoch-1 uncentred value does not exist** for any run. Every ep1
+  number quoted here and in the entries above is centred. If the paper
+  reports an epoch-1 claim under the uncentred convention, the trajectory
+  evaluator has to be extended and these runs redone.
+- One seed per cell (seed 0 here, seed 1 above); n=2 seeds total, no
+  error bars.
+- `random_label_clfonly` only. `finetune`, other methods and other
+  datasets were out of scope for this run.
+- `forget-heldout 0` in every split (`split_mode=all`), so these runs say
+  nothing about held-out generalisation.
+- The epoch-convention open decision below (epoch 1 vs end of budget) is
+  still unresolved and still changes what gets quoted.
+
+**Supersedes:** the "remaining 3 — ArcFace seed-0, fc1/fc2/fc3 — are still
+pre-fix" caveat in the 2026-09-14 seed-1 entry, and that entry's
+attribution of fc2's behaviour to a per-class property.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
