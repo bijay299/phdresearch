@@ -116,7 +116,32 @@ class RunDir:
 
     @classmethod
     def create(cls, base: str | Path, name: str, cfg: Dict[str, Any]) -> "RunDir":
+        """
+        Refuses to start if `root` already exists and is non-empty, instead
+        of silently reusing it.
+
+        Run directory names are derived from data/head/seed, not the full
+        config -- two runs that differ only in, say, `unlearn.epochs` get
+        the SAME name. Before this check, a second run into an existing
+        directory would overwrite config.json/env.json (so they'd describe
+        the wrong run) while *appending* to results.jsonl/trajectory.jsonl,
+        silently mixing rows from incompatible configs into one file. That
+        is exactly how CE's `finetune` row in results.jsonl ended up
+        describing a 30-epoch run under a label everything else assumes is
+        3 epochs (see notes/decisions.md, 2026-09-14). A fresh or empty
+        `root` is unaffected -- this only blocks reusing one that already
+        has something in it.
+        """
         root = Path(base) / name
+        if root.exists() and any(root.iterdir()):
+            raise FileExistsError(
+                f"refusing to start: {root} already exists and is not empty. "
+                f"Run directory names don't encode the full config, so reusing "
+                f"one silently mixes results from different configs into the "
+                f"same results.jsonl/trajectory.jsonl (see notes/decisions.md, "
+                f"2026-09-14). Remove it, move it aside, or give this run a "
+                f"different name."
+            )
         root.mkdir(parents=True, exist_ok=True)
         rd = cls(root=root, cfg=cfg)
         rd.write_json("config.json", cfg)

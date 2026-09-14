@@ -5,6 +5,7 @@
 test:
 	python src/test_metrics.py
 	python src/test_data.py
+	python src/test_utils.py
 
 # Wiring check, CPU, ~2 min.
 smoke:

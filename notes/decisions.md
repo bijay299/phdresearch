@@ -534,6 +534,52 @@ that pair becomes comparable too.
 
 ---
 
+## 2026-09-14 — RunDir silently mixed configs into one results file; now refuses
+
+**What happened:** run directory names (`utils.RunDir.create`, called from
+`scripts/run_experiment.py` and `scripts/retrain_stability.py`) are derived
+from data/head/seed only, not the full config. The 2026-09-13 CE extension
+(`unlearn.epochs=30`) reused the same directory name --
+`logs/cifar10_ce_seed0/` -- as the original 3-epoch run. `RunDir.create`
+happily let it: `config.json`/`env.json` got overwritten to describe the
+30-epoch run, while `results.jsonl` got a new `finetune`/`finetune_clfonly`
+row *appended* under the same method names the 3-epoch run used. Dedup
+logic (keep latest occurrence per method) then discarded the original
+3-epoch rows entirely -- their `ncc`/`verif_auc`/`nc2`/raw `nc1`/uncentred
+`nc3` values are not recoverable from anywhere on disk. The forget-specific
+subset (`output_forget`, `output_retain`, `probe_forget`,
+`nc3_centred_forget`, `nc1_angular`) survives at epochs 0-3 in
+`trajectory.jsonl`, because that file is genuinely append-only across a
+run's own epochs -- but the richer end-of-run row is gone.
+
+**Fix:** `RunDir.create` now raises `FileExistsError` if the target
+directory exists and is non-empty, instead of silently writing into it. A
+fresh or empty directory still works exactly as before. This makes the
+2026-09-13 situation impossible to repeat silently -- the CE extension run
+would now refuse to start until the existing directory is moved aside, or
+given a distinct name (as `retrain_stability.py` already does with its
+`_retrain_fc<N>` suffix).
+
+**Test:** `src/test_utils.py`, added to `make test`. Covers: fresh
+directory succeeds, empty existing directory succeeds, non-empty directory
+raises, a single unrelated stray file still counts as non-empty, and
+refusal happens before any write (existing `config.json`/`results.jsonl`
+content is provably untouched by the refused call).
+
+**Data cleanup:** relabelled the two affected rows in
+`logs/cifar10_ce_seed0/results.jsonl` from `finetune`/`finetune_clfonly` to
+`finetune_ep30`/`finetune_clfonly_ep30`, so they can no longer be mistaken
+for the base 3-epoch config `--compare` and everything else assumes. CE's
+`results.jsonl` now has **no** row for the true 3-epoch `finetune`/
+`finetune_clfonly` end-of-run metrics -- only the trajectory subset noted
+above. Regenerating the missing full-metric row requires an actual rerun
+(now safe to do without risk of silently re-mixing, since `RunDir` will
+refuse if `cifar10_ce_seed0/` isn't cleared first). Not done here --
+no rerun was requested, and this is local, gitignored data rather than
+something the fix itself needed to touch.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
