@@ -1163,6 +1163,94 @@ disjoint, identity-complete, and label-consistent through one shared scan.
 
 ---
 
+## 2026-09-14 — CIFAR ArcFace seed-1 re-run post-LR-fix; fc2 anomaly was the bug, not seed variance
+
+**Supersedes:** the ArcFace half of "2026-09-14 — random_label_clfonly
+confirmed at a second seed, all 4 classes", and its conclusion that seed
+1's weak fc2 point was "ordinary seed-to-seed variation". Those ArcFace
+seed-1 numbers were produced at commit `ec70213`, before the
+`CosineAnnealingLR` `T_max` fix (`1e833ed`). **They are pre-fix history and
+are not authoritative.** The CE seed-1 numbers in that entry stand
+unchanged: `configs/cifar_ce.yaml` inherits `warmup_epochs: 0`, so CE never
+took the truncated-schedule path (its seed-1 baseline ends at lr 0.00000 on
+the pre-fix commit, confirmed in `logs/cifar10_ce_seed1/run.log`).
+
+**Commands** (GPU 3, sequential, both at commit `ce47876`):
+
+```bash
+CUDA_VISIBLE_DEVICES=3 python scripts/run_experiment.py \
+  --config configs/cifar_arcface.yaml \
+  --set seed=1 out_dir=logs/postfix_seed1 unlearn.enabled=false
+
+CUDA_VISIBLE_DEVICES=3 python scripts/unlearn_across_classes.py \
+  --config configs/cifar_arcface.yaml --forget-classes 0,1,2,3 \
+  --ckpt logs/postfix_seed1/cifar10_arcface_seed1/ckpt.pt \
+  --conditions random_label_clfonly \
+  --set seed=1 out_dir=logs/postfix_seed1
+```
+
+Written to `logs/postfix_seed1/`, a fresh tree — the pre-fix seed-1
+directories under `logs/` were left untouched for comparison, not
+overwritten.
+
+**Provenance.** Every new run records `git_commit: ce47876`. The baseline
+ends at **lr 0.00000** (pre-fix seed-1 ended at lr 0.00670 — the truncation
+bug, visible directly in the two `run.log`s).
+
+**Baseline accuracy and head fairness.** ArcFace seed-1 test accuracy
+91.71% -> **93.09%**. CE seed-1 is 93.14%, so the heads now match to
+**0.05pp** at seed 1 (pre-fix gap: 1.43pp), mirroring seed 0's post-fix
+parity (93.36 / 93.41). The geometry comparison below is therefore not
+confounded by one head simply being a worse model. Collapse also tightened:
+nc2 0.0813 -> **0.0348**, nc3_centred_mean 0.936 -> **0.970**, nc1_angular
+0.0607 -> **0.0384**.
+
+**`random_label_clfonly`, ArcFace, seed 1 (frozen backbone — any nc3 change
+is the classifier alone).** `nc3_centred_forget`; `output_forget` is 0.0000
+at every epoch >= 1 in all four classes:
+
+| fc | ep1 pre-fix | ep1 post-fix | final pre-fix | final post-fix | out_retain post-fix |
+|---|---|---|---|---|---|
+| 0 | -0.8490 | **-0.8832** | -0.8879 | **-0.9161** | 0.9351 |
+| 1 | -0.8458 | **-0.9315** | -0.8916 | **-0.9601** | 0.9291 |
+| 2 | -0.6782 | **-0.8647** | -0.7209 | **-0.8983** | 0.9403 |
+| 3 | -0.9444 | **-0.8890** | -0.9558 | **-0.9039** | 0.9494 |
+
+Uncentred final `nc3_uncentred_forget` is -0.981 in all four (the
+convention the theory's prediction is actually about; the centred column is
+the same model under the global-mean-subtracted convention — both reported
+per CLAUDE.md). Retain-class alignment stays high (nc3_centred_retain_mean
++0.966 to +0.975) and `output_retain` 0.9291-0.9494 against a 0.9309
+baseline, so nothing collapsed to buy the forgetting.
+
+**The flagged fc2 anomaly is gone, and the earlier explanation was wrong.**
+Pre-fix fc2 was the one weak ArcFace point (ep1 -0.6782, final -0.7209,
+with a low epoch-0 start of +0.8956). Post-fix it starts at +0.9993 and
+lands at -0.8983, inside the family with the other three. The previous
+entry attributed this to the seed-1 checkpoint's wider per-class alignment
+spread (std 0.090 vs seed 0's 0.043) read as seed noise. That spread was
+itself a symptom of the truncated LR schedule — it disappears when the
+schedule decays fully. Post-fix the four ArcFace ep1 values span
+-0.8647..-0.9315, a **0.067** range against pre-fix's 0.266. No anomaly
+remains to explain.
+
+**Does the 16/16 directional claim survive? Yes, and on firmer ground.**
+All 4 ArcFace seed-1 points still flip negative at epoch 1; CE seed-1 stays
+positive at epoch 1 in all 4 (+0.4354 to +0.4842, re-read from
+`trajectory.jsonl`, not from a tally). Of the 16 (head, class, seed)
+points, 13 now rest on runs that are either post-fix or provably unaffected
+by the bug: 8 CE (warmup_epochs=0 throughout), 4 ArcFace seed-1 (this
+entry), 1 ArcFace seed-0 fc0 (re-verified in the LR-fix entry). **The
+remaining 3 — ArcFace seed-0, fc1/fc2/fc3 — are still pre-fix** and should
+be re-run before the count is quoted in the paper. Every post-fix ArcFace
+point re-run so far has come back the same sign or stronger, so there is no
+live reason to expect those three to differ.
+
+**Not run here, deliberately:** `finetune`, retrain references, other
+methods, other seeds. This was a scoped re-verification of one condition.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
