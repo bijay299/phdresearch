@@ -120,6 +120,17 @@ keeps them separate. If they leak, the generalisation result is meaningless.
 **Every run logs config, seed, git commit and device.** `utils.RunDir` handles
 it. Do not add a code path that writes results without going through it.
 
+**Background watchers must have a timeout and report, never poll
+indefinitely.** A shell spawned to wait on a PID or a condition and then
+notify can keep running long after what it's watching for has already
+happened -- it just sits there polling a dead process, silently diverging
+from the actual state of the machine. This has happened twice now: watcher
+shells kept polling six retrain jobs for roughly an hour after they had
+already finished. Give every watcher an explicit timeout and have it report
+what it found (done / still running / timed out) rather than looping
+forever on the assumption that "still running" is the only outcome worth
+coding for.
+
 ---
 
 ## Layout

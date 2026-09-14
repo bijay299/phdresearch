@@ -307,6 +307,126 @@ unlearning results are read against the right reference point per head.
 
 ---
 
+## 2026-09-13 — CIFAR-10 forget_class=0 table: finetune gap is real, retrain gap is stable across classes
+
+Three checks on the CIFAR-10 pilot's forget_class=0 results table before
+trusting it for anything.
+
+### 1. CE finetune (output_forget 0.85) vs ArcFace finetune (0.00) is not a
+convergence artifact
+
+Both use identical `unlearn.epochs=3, lr=0.001, weight_decay=5e-4` from
+`base.yaml` -- hyperparameters were already matched, so the discrepancy
+couldn't be a config typo. The open question was whether CE is simply slower
+to reach the same place ArcFace reaches at epoch 3.
+
+**Diagnostic** (`diag_finetune_trajectory.py`, scratch, not checked in):
+loaded each head's checkpoint and ran retain-only finetune epoch-by-epoch at
+the same lr/wd, evaluating `output_forget`/`output_retain`/`probe_forget`
+after every epoch, out to 10x the configured budget.
+
+| epoch | CE output_forget | ArcFace output_forget |
+|---|---|---|
+| 1 | 0.903 | **0.000** |
+| 3 (configured budget) | 0.853 | 0.000 |
+| 10 | 0.756 | -- |
+| 20 | 0.729 | -- |
+| 30 | **0.662** | -- |
+
+ArcFace collapses to 0 within one epoch and stays there. CE decays slowly
+and monotonically, and the rate is *flattening*, not accelerating -- at 10x
+the epoch budget it has closed less than a third of the gap to zero.
+`output_retain` stayed at 0.937-0.939 and `probe_forget` at 0.93-0.94
+throughout the CE trajectory, so this isn't the model breaking; retain
+utility is untouched while the forget class is barely being dented.
+
+**Conclusion:** not a hyperparameter/convergence issue. Retain-only
+finetuning erodes forget-class output accuracy at a genuinely different
+rate under the two heads at matched settings. Whether that's the mechanism
+under test (margin blocking the drift shortcut, forcing forgetting through
+some other slower path) or something else is a question for the geometry
+numbers, not a reason to throw out the comparison. Do not "fix" this by
+giving CE more finetune epochs in `base.yaml` -- that would change the
+comparison's meaning (a fixed epoch budget across heads), not correct a bug.
+
+### 2. probe_gap_to_retrain added to `--compare`
+
+`probe_forget` is not comparable across heads (see 2026-09-11 entry above:
+retrain references differ, 0.8630 CE vs 0.5540 ArcFace). `scripts/run_experiment.py
+compare()` now looks up each row's own head+forget_class retrain reference
+and prints `probe_gap_to_retrain* = probe_forget - retrain_probe_forget`,
+labelled with a footnote that it is our arithmetic, not an AISTATS metric.
+Also added a `forget_class` column, now that more than one forget class's
+`retrain` rows can coexist in the same log directory (see next section).
+
+### 3. Retrain-reference gap (CE vs ArcFace) checked across four forget
+classes -- persists
+
+The 0.8630/0.5540 CE/ArcFace retrain-reference gap was measured at
+forget_class=0 only, and every `probe_gap_to_retrain` number in the table
+inherits it. Ran `scripts/retrain_stability.py` for forget_class in {1,2,3}
+per head (fresh backbone+head trained on retain-only, same as the existing
+retrain reference, logged via RunDir to
+`logs/cifar10_<head>_seed0_retrain_fc<N>/`) to check it isn't a one-class
+fluke.
+
+| forget_class | CE retrain probe_forget | ArcFace retrain probe_forget | gap (CE - ArcFace) |
+|---|---|---|---|
+| 0 | 0.8630 | 0.5540 | 0.309 |
+| 1 | 0.8920 | 0.5960 | 0.296 |
+| 2 | 0.7490 | 0.5000 | 0.249 |
+| 3 | 0.7620 | 0.5300 | 0.232 |
+
+Both heads' probe_forget move around by class (CE: 0.749-0.892, ArcFace:
+0.500-0.596) -- expected, some CIFAR-10 classes are just easier to recover
+by transfer than others. The CE-ArcFace gap itself is stable, 0.23-0.31
+across all four classes checked, never closing. **The retrain-reference
+difference is not a forget_class=0 fluke** -- every `probe_gap_to_retrain`
+computed against it for other classes should be trusted at the same level
+as the fc0 numbers already in the table.
+
+`scripts/retrain_stability.py` skips the 30-epoch "original" training and
+the other unlearning methods (retrain doesn't depend on either), but still
+writes through `RunDir` so these four extra runs per head carry the same
+config/seed/commit/device provenance as everything else in `logs/`.
+
+**Also done:** deleted the duplicate `original` rows from
+`logs/cifar10_ce_seed0/results.jsonl` and
+`logs/cifar10_arcface_seed0/results.jsonl` that predated `nc1_angular` --
+`--compare` was picking up two `original` rows per head, one missing the
+angular NC1 field.
+
+---
+
+## 2026-09-13 — Retrain reference gap (first substantive result); finetune trajectories not comparable
+
+**RETRAIN REFERENCE GAP (first substantive result)**
+
+Probe_forget on retrain-from-scratch models, 4 forget classes:
+
+    CE:      0.863, 0.892, 0.749, 0.762
+    ArcFace: 0.554, 0.596, 0.500, 0.530
+    Gap 0.23-0.31, CE higher in every class, ranges do not overlap.
+
+**Interpretation:** a model retrained without class k still recovers it
+under a probe via transfer from remaining classes. ArcFace transfers
+substantially less. No unlearning method involved, so this is a property of
+the training objective, not of any forgetting procedure.
+
+**Consequence:** probe_forget is NOT comparable across heads. Each head
+requires its own retrain reference. Use probe_gap_to_retrain.
+
+**Caveat:** 4 classes, 1 seed. Not yet enough for a confidence interval.
+
+**FINETUNE TRAJECTORY**
+
+ArcFace reaches output_forget=0.0 at epoch 3; CE still at 0.662 after 30.
+Retain-only finetuning removes the class ~10x faster under ArcFace. The
+original comparison table's finetune rows were therefore not comparable --
+the methods were at different points on their trajectories.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO

@@ -242,8 +242,17 @@ def compare(log_dir: str) -> None:
         print(f"no results found under {log_dir}")
         return
 
-    cols = ["head", "method", "output_forget", "probe_forget", "ncc_forget",
-            "verif_auc_forget", "nc3_uncentred_forget", "nc3_uncentred_retain_mean"]
+    # probe_forget is not comparable across heads on its own -- each head has
+    # its own retrain reference (see notes/decisions.md). Look one up per
+    # (head, forget_class) so every row can carry its own gap.
+    retrain_probe = {}
+    for r in rows:
+        if r.get("method") == "retrain":
+            retrain_probe[(r.get("head"), r.get("forget_class"))] = r.get("probe_forget")
+
+    GAP_COL = "probe_gap_to_retrain*"
+    cols = ["head", "method", "forget_class", "output_forget", "probe_forget", GAP_COL,
+            "ncc_forget", "verif_auc_forget", "nc3_uncentred_forget", "nc3_uncentred_retain_mean"]
     widths = {c: max(len(c), 12) for c in cols}
 
     print("\n" + "  ".join(c.ljust(widths[c]) for c in cols))
@@ -251,14 +260,32 @@ def compare(log_dir: str) -> None:
     for r in rows:
         cells = []
         for c in cols:
-            v = r.get(c, float("nan"))
-            cells.append((v if isinstance(v, str) else f"{v:.4f}").ljust(widths[c]))
+            if c == GAP_COL:
+                rp = retrain_probe.get((r.get("head"), r.get("forget_class")))
+                pf = r.get("probe_forget")
+                v = (pf - rp) if (rp is not None and pf is not None and pf == pf) else float("nan")
+            else:
+                v = r.get(c, float("nan"))
+            if isinstance(v, str):
+                text = v
+            elif isinstance(v, bool) or v is None:
+                text = str(v)
+            elif isinstance(v, int):
+                text = str(v)
+            else:
+                text = f"{v:.4f}"
+            cells.append(text.ljust(widths[c]))
         print("  ".join(cells))
 
     print("\nREMINDERS")
     print("  * probe_forget is meaningless alone -- compare against a retrain")
     print("    reference. In the AISTATS CIFAR-10 setting that reference was 77.35")
     print("    on a class it never saw, because deep features transfer.")
+    print(f"  * {GAP_COL} = probe_forget - THIS ROW'S HEAD's own retrain probe_forget")
+    print("    for the same forget_class. This is our arithmetic, not a metric from")
+    print("    the paper -- CE and ArcFace retrain references differ (see")
+    print("    notes/decisions.md), so raw probe_forget must never be compared")
+    print("    directly across heads.")
     print("  * always read forget alongside retain. A model that forgets because")
     print("    it broke has forgotten nothing.")
     print("  * nc3 here is UNCENTRED. The centred version gives different numbers")
