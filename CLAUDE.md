@@ -146,48 +146,11 @@ already shows another process's usage.
 
 ---
 
-## Layout
-
-```
-configs/base.yaml       shared defaults; others inherit and override
-configs/cifar_*.yaml    pilot, one per head
-configs/faces_*.yaml    the real experiment
-
-src/heads.py            CE / ArcFace / CosFace, matched interfaces
-src/backbones.py        ResNet feature extractors (features only, no logits)
-src/data.py             datasets + forget/retain/held-out splits
-src/unlearn.py          finetune, neggrad, neggrad_plus, random_label
-src/train.py            training loop + evaluate() harness
-src/metrics.py          NC1-3, linear probe, NCC, verification AUC
-src/test_metrics.py     regression tests for metrics.py
-src/test_data.py        regression tests for data.py (smoke-mode splitting)
-src/utils.py            config, seeding, run directories
-
-scripts/run_experiment.py   entry point
-notes/decisions.md          decision log, dated
-```
+## Architecture
 
 **Architectural invariant:** backbones return features, heads turn features
 into logits. Nothing else may assume a particular loss. `metrics.py` must stay
 loss-agnostic — it reads `head.weight`, which every head exposes.
-
----
-
-## Commands
-
-```bash
-# wiring check, CPU, ~2 min
-python scripts/run_experiment.py --config configs/cifar_ce.yaml --smoke
-
-# the pilot pair
-python scripts/run_experiment.py --config configs/cifar_ce.yaml
-python scripts/run_experiment.py --config configs/cifar_arcface.yaml
-python scripts/run_experiment.py --compare logs/
-
-# override anything
-python scripts/run_experiment.py --config configs/cifar_ce.yaml \
-    --set train.epochs=5 unlearn.enabled=true
-```
 
 ---
 
@@ -198,10 +161,6 @@ thousands of identities. `configs/cifar_arcface.yaml` already uses s=30 with 5
 warmup epochs. If it still diverges, try s=16, or a margin warmup (m=0 for the
 first epochs then ramp). **This is a tuning problem, not a finding** — do not
 report "ArcFace fails to train" as a result.
-
-**Nothing here has been run on a GPU yet.** The code is syntax-checked and the
-metrics are tested, but the training path is unexercised. Expect small fixes on
-first real execution.
 
 ---
 
