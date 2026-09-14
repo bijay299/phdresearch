@@ -580,6 +580,51 @@ something the fix itself needed to touch.
 
 ---
 
+## 2026-09-14 — finetune and random_label_clfonly patterns hold at fc0-3, no exceptions
+
+The two conditions that showed a real head difference at forget_class=0 --
+`finetune` (full backbone) and `random_label_clfonly` (frozen backbone) --
+were rerun at forget_class in {1,2,3}, both heads, starting from the
+existing checkpoint rather than retraining the original model per class
+(`scripts/unlearn_across_classes.py`, new). Both patterns hold at every
+class checked. fc0 was not unrepresentative.
+
+**`finetune`:** CE never reaches `output_forget=0` at any class, even at 30
+epochs -- final values 0.760 (fc1), 0.633 (fc2), 0.409 (fc3), retain
+healthy throughout (0.93-0.96). ArcFace reaches 0 at or before epoch 5 at
+every class (0.000 at fc1, fc2, fc3). `trajectory_every=5` means the exact
+epoch isn't resolved for fc1-3 -- fc0's finer per-epoch logging showed
+epoch 1, so it's plausible the same holds here, but this run doesn't prove
+it.
+
+**`random_label_clfonly`:** all four classes (0-3) start within
++0.96 to +1.0 of the neural-collapse ceiling -- a common, matched starting
+point regardless of class or head. By epoch 1, CE stays positive at every
+class (+0.41 to +0.47); ArcFace flips negative at every class (-0.79 to
+-0.96). Retain accuracy stays healthy throughout (0.91-0.96), both heads,
+all classes -- not a collapse artefact, same clean condition as fc0.
+
+**Open thread, not yet investigated:** CE `finetune`'s final
+`output_forget` varies considerably by class -- 0.409 to 0.760, a 0.35
+spread across just 4 classes. Some classes are evidently more resistant to
+retain-only finetuning than others. Doesn't change the categorical result
+(CE still never reaches 0 at any class checked), but worth understanding
+later -- possibly related to class separability or how many other classes
+are visually/semantically close to the forgotten one.
+
+**`scripts/unlearn_across_classes.py`** promoted from a scratch script to a
+proper one, following the conventions `scripts/retrain_stability.py`
+already established: loads the config with `load_config`/`apply_overrides`
+(so `--set` works), writes every result through `RunDir` (one fresh
+directory per method+forget_class, e.g.
+`logs/cifar10_ce_seed0_finetune_fc2/`), and starts from the existing
+checkpoint instead of repeating the forget-class-independent original
+training. `--finetune-epochs`/`--finetune-trajectory-every` default to the
+30/5 used here; `--ckpt` defaults to whatever `scripts/run_experiment.py`
+already trained for the given config.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
