@@ -1,0 +1,27 @@
+# 100-identity face subset, ~100-200 images each.
+#
+# Exists to test whether CLASS COUNT explains why ArcFace's nc3 flip
+# replicates on CIFAR-10 (10 classes) but not on the 1000-identity face set
+# (see notes/decisions.md, 2026-09-14). Everything except the dataset is
+# identical to faces_ce.yaml -- same backbone, augmentation, schedule,
+# epochs, head settings -- so class count and images-per-identity are the
+# only things that move.
+#
+# The larger per-identity image count also fixes a measurement problem: at
+# 1000 identities each identity had only 8-10 test images, pinning
+# output_forget and probe_forget to 0.1 granularity. Here each identity has
+# ~20-40 test images after the 0.2 split.
+#
+# Writes to logs100/ rather than logs/ -- run directory names are derived
+# from data.name + head + seed, which would otherwise collide with the
+# 1000-identity runs (RunDir refuses to reuse a nonempty directory).
+
+inherits: faces_ce.yaml
+
+out_dir: logs100
+
+data:
+  root: /data/bijaypandey/archive/casia-webface-folders-100id
+  max_identities: 100
+  min_images: 100
+  max_images_per_identity: 200

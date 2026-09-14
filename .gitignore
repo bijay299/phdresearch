@@ -1,6 +1,7 @@
 # Data and outputs -- never commit these
 data/
 logs/
+logs100/
 *.pt
 *.pth
 *.npz

@@ -1,0 +1,13 @@
+# ArcFace head on the 100-identity subset. s stays at 96 -- the value tuned
+# for the 1000-identity set (notes/decisions.md, 2026-09-14) -- deliberately
+# NOT retuned for 100 classes, so that class count is the only variable
+# against faces_arcface.yaml. If this comes out accuracy-mismatched against
+# faces100_ce.yaml, that is a result to report, not something to tune away.
+
+inherits: faces100_ce.yaml
+head:
+  name: arcface
+  s: 96.0
+  m: 0.5
+train:
+  warmup_epochs: 5

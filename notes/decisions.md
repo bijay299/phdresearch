@@ -915,6 +915,204 @@ stacked on top of it.
 
 ---
 
+## 2026-09-14 — 100-identity face subset: a partial flip, but it does not isolate class count
+
+**Recorded after the fact.** These ten runs were executed before this entry
+was written; everything below is read back out of `logs100/` rather than
+from memory of the session that produced them. Where a fact is not in an
+artifact it is marked as unrecorded, not reconstructed.
+
+**Why it was run.** The 1000-identity result (entry above) showed the CIFAR
+ArcFace nc3 flip does not replicate on faces. Class count was the first
+hypothesis: CIFAR has 10 classes, the face set has 1000. A 100-identity
+subset sits between them. `configs/faces100_ce.yaml` and
+`configs/faces100_arcface.yaml` hold the executed setup; both are untracked
+as of this entry and should be committed with it.
+
+### Provenance
+
+| | |
+|---|---|
+| Dataset | `/data/bijaypandey/archive/casia-webface-folders-100id` |
+| Identities / images | 100 / 15,707 |
+| Images per identity | min 101, median 152.5, mean 157.07, max 200 |
+| Split | `stratified_image_split`, `test_fraction` 0.2 → train 12,568 / test 3,139; 20-40 test images per identity (mean 31.4) |
+| Code commit | `61abcbf` on all ten runs (`env.json`) |
+| Device | `cuda (NVIDIA A100-SXM4-40GB)` on all ten runs |
+| Seed | 0 |
+| LR schedule | post-fix -- both baselines end at `lr 0.00000` in `run.log` |
+| Head settings | ArcFace s=96.0, m=0.5, 5 warmup epochs -- the 1000-identity values, deliberately not retuned |
+| Everything else | inherited unchanged from `faces_ce.yaml` → `base.yaml`: resnet18, `small_input: false`, `feat_dim: 512`, 40 epochs, lr 0.1, wd 5e-4, SGD, cosine, batch 128, same augmentation |
+
+**The run commands are recorded**, in `env.json` `argv`. Baselines:
+`scripts/run_experiment.py --config configs/faces100_{ce,arcface}.yaml --set
+unlearn.enabled=false`. Unlearning: `scripts/unlearn_across_classes.py
+--config configs/faces100_{ce,arcface}.yaml --forget-classes 0,29,60,95
+--conditions random_label_clfonly`. Loading each config through
+`utils.load_config` and diffing against the stored `config.json` gives an
+exact match on every key except `unlearn.enabled`, which the `--set`
+override above accounts for -- so the two config files reproduce the
+executed setup.
+
+**Unrecorded: the extraction seed.** The conversion command that produced
+this directory was never written down. The observed per-identity range
+(101-200) is consistent with `convert_rec_to_folders.py --min-images 100
+--max-identities 100 --max-images-per-identity 200`, and the extraction ran
+2026-09-14 12:38, but `--seed` is not recorded anywhere -- not in the run
+configs (which capture `FaceFolder` arguments, not the converter's), not in
+`env.json`, not here until now. Identity selection inside the converter is
+`rng.choice`-driven, so **this exact 100-identity set is not reproducible
+from the artifacts alone.** A re-extraction at the script default (seed 0)
+may or may not reproduce it; that has not been tested. Treat the directory
+itself as the primary artifact until this is resolved.
+
+**The two face sets are not nested.** Only **31 of the 100** identities also
+appear in the 1000-identity set, and the shared ones carry different image
+counts (e.g. `00009`: 50 images there, 160 here). So relative to the
+1000-identity experiment this changes class count *and* images per identity
+*and* identity membership. The config header's claim that "class count and
+images-per-identity are the only things that move" is wrong on the third
+count.
+
+### Baselines -- accuracy-matched
+
+| head | test acc | probe_overall | verif_auc | ncc_overall | nc1 | nc1_angular | nc2 | nc3_centred_mean | nc3_uncentred_mean |
+|---|---|---|---|---|---|---|---|---|---|
+| CE | **0.8468** | 0.8433 | 0.9598 | 0.8394 | 0.5461 | 0.5164 | 0.1398 | +0.8895 | **+0.6416** |
+| ArcFace | **0.8407** | 0.8343 | 0.9570 | 0.5221 | 1.3110 | 0.0533 | 0.1381 | +0.8511 | **-0.8778** |
+
+**0.61pp apart** -- the tightest head-to-head match in the project so far
+(CIFAR 0.05pp, faces-1000 1.94pp). The fairness gate passes, and it passes
+with s=96 carried over untouched, so the 1000-way scale is not mistuned at
+100-way. The uncentred-NC3 baseline offset between heads (+0.64 vs -0.88)
+reproduces the CIFAR and faces-1000 pattern exactly; it remains a property
+of the loss, not of any unlearning.
+
+### `random_label_clfonly`, 4 identities, both heads
+
+Backbone frozen, so every nc3 movement below is the classifier alone.
+`nc3_centred_forget`, per epoch, from `trajectory.jsonl`:
+
+| head | label | folder | ep0 | ep1 | ep2 | ep3 (final) |
+|---|---|---|---|---|---|---|
+| CE | 0 | `00006` | +0.9009 | +0.5395 | +0.5318 | **+0.5222** |
+| CE | 29 | `01240` | +0.9092 | +0.4750 | +0.4663 | **+0.4560** |
+| CE | 60 | `03938` | +0.8603 | +0.4335 | +0.4280 | **+0.4202** |
+| CE | 95 | `07818` | +0.9207 | +0.4547 | +0.4500 | **+0.4446** |
+| ArcFace | 0 | `00006` | +0.9615 | +0.6113 | +0.5373 | **+0.4636** |
+| ArcFace | 29 | `01240` | +0.6855 | **-0.3718** | -0.4857 | **-0.5778** |
+| ArcFace | 60 | `03938` | +0.9970 | +0.2955 | +0.1820 | **+0.0667** |
+| ArcFace | 95 | `07818` | +0.9981 | +0.4161 | +0.1083 | **-0.2205** |
+
+**Utility and forget outcome are matched and healthy throughout.**
+`output_forget` is exactly 0.0000 at epochs 1, 2 and 3 in all eight runs.
+`output_retain` at the final epoch: ArcFace 0.8413 / 0.8420 / 0.8414 /
+0.8416, CE 0.8217 / 0.8231 / 0.8250 / 0.8300 -- each within ~0.02 of its own
+head's baseline, so nothing here is a collapse artefact. Uncentred
+`nc3_uncentred_forget` at the final epoch: ArcFace -0.966 to -0.969, CE
+-0.079 to -0.144.
+
+### The result depends on which epoch you read it at
+
+This is the part that must not be lost.
+
+- **At epoch 1** -- the matched-output_forget point at which *every CIFAR
+  claim in this project has been stated* -- only label 29 is negative.
+  **1 of 4.** Labels 60 and 95 are still clearly positive (+0.2955,
+  +0.4161).
+- **At epoch 3** (end of the 3-epoch budget) -- 2 negative (29 at -0.5778,
+  95 at -0.2205), 1 near zero (60 at +0.0667), 1 positive (0 at +0.4636).
+  **2 of 4.**
+
+Both readings are correct; they are different conventions. On CIFAR the
+distinction never mattered because the flip was complete by epoch 1 and
+stayed there. Here ArcFace drifts monotonically negative across all three
+epochs at three of four identities, so the headline number is a function of
+where the budget stops. **No comparison across datasets is meaningful until
+one convention is fixed and applied to CIFAR, faces-1000 and faces-100
+alike.**
+
+Two further qualifications on the epoch-3 reading:
+
+1. ArcFace label 0's "positive" value (+0.4636) is numerically
+   indistinguishable from CE's four values (+0.4202 to +0.5222). At that
+   identity ArcFace does not behave like CIFAR ArcFace; it behaves like CE.
+2. The two identities that go negative (29, 95) happen to be two of the 31
+   that also exist in the 1000-identity set, and the two that do not (0, 60)
+   are new. With n=4 that is a coincidence worth noting and nothing more --
+   it is not offered as a pattern.
+
+CE, by contrast, is flat and boring: four identities, all +0.42 to +0.52 at
+epoch 3, spread 0.10. ArcFace's spread is 1.04 (-0.58 to +0.46). The
+between-identity variance gap flagged on faces-1000 reproduces here and is
+still undiagnosed.
+
+### What this does and does not establish
+
+**Consistent with a class-count effect.** Ordering the three datasets by
+class count gives 10 (CIFAR: 4/4 flip hard, at epoch 1), 100 (2/4 at epoch
+3, 1/4 at epoch 1), 1000 (0/4). Monotone, in the predicted direction.
+
+**But it does not isolate class count.** Against faces-1000 this experiment
+moves at least three things at once: class count (1000→100), images per
+identity (48.5→157), and identity membership (69 of 100 identities are new).
+Against CIFAR it additionally moves domain and scale s. **This is
+suggestive, not a controlled test of the hypothesis, and it should not be
+written up as one.** The controlled version is a subsample of the *existing*
+1000-identity directory down to 100 identities at the same ~48.5 images
+each, holding membership and density fixed -- not a fresh extraction.
+
+**No probe claim is available on any face dataset.** There is still no
+retrain reference for faces-1000 or faces-100, for either head:
+`probe_gap_to_retrain` is null in every row of all eight runs above, and no
+`faces*_retrain*` run directory exists. The standing rule is that absolute
+probe accuracy is not evidence -- only the gap against a reference is -- so
+the `probe_forget` values recorded here (CE 0.7742-0.9200, ArcFace
+0.7600-0.9259) are uninterpretable as they stand and must not enter a table.
+Generating the faces retrain references is a precondition for any faces
+probe number, on either dataset.
+
+The 0.1-granularity problem from faces-1000 *is* fixed here: 20-40 test
+images per identity instead of 8-10. That improves the resolution of
+`output_forget` and `probe_forget` -- it does not make them interpretable
+without the reference.
+
+**Not done:** no seed replication (and note that a faces seed replication is
+currently blocked -- `build_datasets` reads `seed` from the `data` sub-dict,
+which no config sets, so `--set seed=1` would not change the faces split),
+no CosFace, no `finetune` on faces, no mechanism diagnosis, no retrain
+reference.
+
+### Decision needed from Rawat before the next run
+
+Three questions, and they interlock -- answering them separately will not
+work:
+
+1. **Is a partial negative result acceptable?** This is no longer
+   hypothetical, which is what the standing open decision anticipated. The
+   effect is complete on CIFAR, absent at 1000 identities, and partial and
+   high-variance at 100. The plausible paper is now "the mechanism is
+   moderated by class count / classification geometry", not "margin losses
+   close the shortcut". Confirm that is a result worth writing before more
+   compute goes into it.
+2. **Which epoch convention do we report?** Epoch 1 (matched-output, what
+   every CIFAR claim used) gives 1/4 negative. Epoch 3 (end of budget) gives
+   2/4. The convention must be fixed once and applied retroactively to all
+   three datasets; the choice materially changes the headline.
+3. **Scope -- explain or broaden?** Roughly eight weeks remain to the Nov 16
+   deadline. Explaining the divergence means a controlled class-count
+   experiment plus the faces retrain references plus a mechanism diagnosis.
+   Broadening means CosFace, more identities, more seeds. There is not time
+   to do both properly.
+
+**Decided pending that conversation:** nothing new is run. The immediate
+queue if the answers point at "explain" is (a) faces retrain references,
+both heads, both datasets, (b) the post-LR-fix CIFAR ArcFace seed-1 rerun,
+(c) a class-count experiment that actually holds membership and density
+fixed.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
@@ -922,6 +1120,11 @@ stacked on top of it.
 - [ ] Is a negative result acceptable? (If ArcFace shows the same
       misalignment as CE, the paper becomes "the mechanism is general".)
       Get this agreed with Rawat now, not in week eight.
+- [ ] Which epoch convention do we report `nc3_*_forget` at — epoch 1
+      (matched output_forget, what every CIFAR claim used) or end of the
+      unlearning budget? Raised 2026-09-14 by the 100-identity run, where
+      the two give 1/4 and 2/4 negative. Must be fixed once and applied to
+      CIFAR, faces-1000 and faces-100 alike.
 - [ ] Scope — one dataset done properly, or breadth?
 
 ---
