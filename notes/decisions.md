@@ -838,6 +838,83 @@ that has to clear before any geometry comparison is meaningful.
 
 ---
 
+## 2026-09-14 — The CIFAR result does NOT replicate on faces: ArcFace does not flip
+
+First unlearning condition run on faces, now that baselines are matched
+(CE 74.65%, ArcFace 72.71%, 1.94pp apart -- see the entry above).
+`random_label_clfonly` -- the cleanest CIFAR finding, backbone frozen so
+any nc3 movement is the classifier alone -- at 4 forget identities (0,
+122, 389, 794), both heads, seed 0. All four identities sit at the
+50-image cap (train 40 / test 10 each), so sample size is comparable
+across them; 739 of the 1000 identities are at that cap, so these are
+typical, not cherry-picked.
+
+| head | identity | ep0 | ep1 | final (ep3) | output_retain (final) |
+|---|---|---|---|---|---|
+| CE | 0 | +0.7887 | +0.2346 | +0.2345 | 0.7232 |
+| CE | 122 | +0.8212 | +0.2084 | +0.2084 | 0.7202 |
+| CE | 389 | +0.7865 | +0.1857 | +0.1857 | 0.7276 |
+| CE | 794 | +0.8508 | +0.3047 | +0.3045 | 0.7238 |
+| ArcFace | 0 | +0.8875 | +0.9793 | +0.9484 | 0.7237 |
+| ArcFace | 122 | +0.9502 | +0.9752 | +0.9373 | 0.7232 |
+| ArcFace | 389 | +0.8539 | +0.4499 | +0.2922 | 0.7221 |
+| ArcFace | 794 | +0.9403 | +0.6283 | +0.4680 | 0.7241 |
+
+**The CIFAR pattern does not replicate.** On CIFAR, ArcFace flipped
+negative at epoch 1 in 16/16 (head, class, seed) checks. On faces,
+**ArcFace stays positive at all 4 identities -- 0/4 flip.** CE also stays
+positive (+0.19 to +0.30 at epoch 1, tight), which is the same direction
+CE showed on CIFAR; it is specifically ArcFace's behaviour that differs
+between the two datasets. ArcFace's values span +0.29 to +0.98 across the
+four identities, a much wider spread than CE's.
+
+**`output_retain` is healthy throughout** -- 0.720 to 0.728 across both
+heads and all four identities, each tracking its own head's baseline. No
+collapse confound; this is not a case of "forgot everything because the
+model broke."
+
+**Measurement soundness checked before concluding anything.** The obvious
+worry was that faces' forget-class mean is estimated from ~40 training
+images against CIFAR's ~4,500, and that nc3 is simply too noisy at that
+size to show a flip. Tested directly by recomputation on the CIFAR ArcFace
+fc0 epoch-1 weight matrix (reproduced deterministically and verified
+against the committed -0.9109, matched at -0.9108): estimate the
+forget-class mean from 40 randomly sampled training images instead of all
+~4,500, 20 trials, everything else held fixed.
+
+    mean -0.9008   std 0.0575   min -0.9693   max -0.7288
+    20/20 trials below -0.5      0/20 sign flips
+
+Tight and consistently negative. **At n=40, CIFAR's flip is robust, so the
+~40-sample class-mean estimate is not what prevents a flip on faces.** The
+divergence is real, not an artefact of a starved estimator.
+
+**Separate limitation, still standing:** `output_forget` and
+`probe_forget` on faces have 0.1 granularity -- identities have 8-10 test
+images each (min 8, max 10, mean 9.70, median 10), against CIFAR's ~1,000
+test images per class. The constant 0.7000 seen in these runs is literally
+7/10. Those two metrics are resolution-limited on faces in a way that
+`nc3_centred_forget` (which reads the ~40 training images, and was just
+shown to be stable at that size) is not. Worth fixing or at least stating
+loudly before any claim rests on faces `probe_forget` numbers; raising
+`test_fraction` or the per-identity image cap would both help.
+
+**Open, unexplained:** ArcFace's between-identity variance is much larger
+than CE's (+0.29 to +0.98 vs +0.19 to +0.30). Two identities (0, 122) sit
+near +0.95, two (389, 794) are considerably weaker. Flagged rather than
+averaged away, same as the ArcFace fc2/seed1 outlier on CIFAR. Not yet
+diagnosed.
+
+**Not yet done, deliberately:** no mechanism diagnosis, no seed
+replication, no CosFace, no `finetune` condition on faces, no
+generalisation/held-out-appearance experiment. The next question is *why*
+ArcFace behaves differently here -- 1000-way vs 10-way geometry, the s=96
+vs s=30 scale, or something about the face feature space -- and that
+should start from a clean look at this table rather than from more runs
+stacked on top of it.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
