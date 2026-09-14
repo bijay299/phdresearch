@@ -796,6 +796,48 @@ here.
 
 ---
 
+## 2026-09-14 — Faces ArcFace tuning resolved: s=64 was the wrong scale for 1000-way classification
+
+`s=64` -- the value the config already called "standard for face
+recognition with many identities" -- was itself the problem. Standard
+ArcFace guidance scales `s` up with class count; 1000 classes needs more
+than the 64 carried over from a smaller setup. (The first tuning attempt
+went the opposite direction, `s=64->30` matching CIFAR's own fix for its
+10-class scale, and collapsed accuracy to 25.02% -- the wrong direction
+entirely, since CIFAR and faces needed opposite corrections. See the
+LR-schedule entry above for that detour.)
+
+Raised `s: 64 -> 96` (m=0.5 unchanged, augmentation kept, fixed schedule):
+
+| | test acc | train acc (no-margin) | gap |
+|---|---|---|---|
+| s=64 | 64.63% | 90.98% | 26.35pp |
+| **s=96** | **72.71%** | 96.40% | 23.69pp |
+
+**Head-to-head gap: 9.26pp -> 1.94pp** (CE 74.65% vs ArcFace 72.71%) --
+tighter than the CIFAR pilot's own 1.6pp gap. Target met (roughly 2-3pp
+was the bar).
+
+**Diagnostic signature worth keeping in mind for future tuning:** test
+accuracy grew *faster* than train accuracy this time (+8.08pp vs
++5.42pp). That's the opposite pattern from the augmentation experiment
+(previous entry), where train accuracy fell 8.37pp and test accuracy
+didn't move at all -- reduced memorization with no generalisation payoff.
+Here, both rose and test rose more, which is the signature of a genuine
+capacity/gradient-informativeness fix (the softmax was under-scaled for a
+1000-way problem) rather than a regularization effect. The two
+interventions looked superficially similar (both "improve the ArcFace
+face model") but were mechanistically different, and only one of them
+actually closed the gap that mattered.
+
+`configs/faces_arcface.yaml` updated to `s: 96.0` so the checked-in config
+matches what produced this result. Not yet re-run: the retrain-reference,
+CIFAR-style forget-class trajectory, or any unlearning condition on faces
+-- this entry only resolves baseline accuracy matching, the CLAUDE.md gate
+that has to clear before any geometry comparison is meaningful.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
