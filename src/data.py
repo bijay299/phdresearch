@@ -53,12 +53,19 @@ def cifar_transforms(train: bool):
 
 
 def face_transforms(train: bool, size: int = 112):
-    """Horizontal flip only. Aggressive augmentation (rotation, colour jitter)
-    changes the appearance distribution, which is the thing we are trying to
-    measure -- do not add it without a reason."""
+    """Horizontal flip plus mild translation jitter -- a small RandomCrop pad
+    on the already-resized image, the same idiom as cifar_transforms' own
+    RandomCrop(32, padding=4), just scaled to this image size. Deliberately
+    NOT aggressive augmentation (rotation, colour jitter, RandomResizedCrop's
+    scale/aspect distortion) -- those change the appearance distribution,
+    which is the thing we are trying to measure, and do not add them without
+    a reason. Translation jitter is narrower: it shifts the face within the
+    frame without touching scale, aspect ratio, or photometric appearance,
+    so it doesn't carry the same risk. See notes/decisions.md, 2026-09-14."""
     if train:
-        return T.Compose([T.Resize((size, size)), T.RandomHorizontalFlip(),
-                          T.ToTensor(), T.Normalize(FACE_MEAN, FACE_STD)])
+        return T.Compose([T.Resize((size, size)), T.RandomCrop(size, padding=8),
+                          T.RandomHorizontalFlip(), T.ToTensor(),
+                          T.Normalize(FACE_MEAN, FACE_STD)])
     return T.Compose([T.Resize((size, size)), T.ToTensor(),
                       T.Normalize(FACE_MEAN, FACE_STD)])
 

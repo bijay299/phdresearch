@@ -39,7 +39,16 @@ def train_model(backbone: nn.Module, head: nn.Module, train_loader: DataLoader,
         opt = torch.optim.SGD(params, lr=lr, momentum=0.9,
                               weight_decay=weight_decay, nesterov=True)
 
-    sched = (torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+    # T_max must match the number of times sched.step() actually fires below
+    # (epochs - warmup_epochs, since warmup epochs don't call it), not the
+    # raw epoch count -- otherwise the cosine cycle never completes and the
+    # final LR lands well above 0. Every warmup_epochs>0 run before this fix
+    # (every ArcFace run in the project so far) trained with a truncated
+    # schedule: CIFAR ArcFace (epochs=30, warmup=5) ended at lr=0.00670, not
+    # 0.00000, and faces ArcFace (epochs=40, warmup=5) ended at lr=0.00381.
+    # See notes/decisions.md, 2026-09-14.
+    cosine_epochs = epochs - warmup_epochs if warmup_epochs else epochs
+    sched = (torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cosine_epochs)
              if scheduler == "cosine" else None)
 
     for ep in range(epochs):

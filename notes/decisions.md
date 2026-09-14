@@ -676,6 +676,126 @@ worth a look if seed=1 is extended further.
 
 ---
 
+## 2026-09-14 — LR schedule truncation bug fixed; CIFAR fc0 findings re-verified, hold
+
+**Discovery.** Investigating faces ArcFace's baseline test accuracy (61.79%
+vs CE's 74.20%, a 12.4pp gap -- CIFAR's pilot only had 1.6pp). First
+attempted the CIFAR fix (`s: 64 -> 30`, matching `s` tuned down for CIFAR's
+10-class scale): accuracy collapsed to 25.02%, the wrong direction --
+standard ArcFace guidance scales `s` *up* with class count, not down, and
+faces has 1000 classes vs CIFAR's 10. Reversed course rather than chasing
+`s=16` next.
+
+Checked `train_model`'s LR schedule instead. `CosineAnnealingLR` is built
+with `T_max=epochs`, but `sched.step()` only fires on post-warmup epochs --
+so with `warmup_epochs>0` the schedule receives only `epochs -
+warmup_epochs` steps against a cycle calibrated for the full `epochs`,
+and never fully decays. Confirmed directly from real run logs: CIFAR
+ArcFace (epochs=30, warmup=5) ended at lr=0.00670, not 0.00000; faces
+ArcFace (epochs=40, warmup=5) ended at lr=0.00381. **Every `warmup_epochs >
+0` run in the project trained with a truncated schedule** -- every ArcFace
+run so far, since CE always uses `warmup_epochs=0` and was never affected.
+
+**Fix:** `src/train.py` now sets `T_max = epochs - warmup_epochs` (the
+actual step count the scheduler receives) instead of the raw `epochs`.
+Added `src/test_train.py` (4 tests, in `make test`): confirms the schedule
+reaches ~0 with warmup, without warmup (regression guard for CE's path),
+at the real epochs=40/warmup=5 configuration, and that the warmup ramp
+itself is still linear and correct.
+
+**Effect on CIFAR ArcFace baseline accuracy:** 91.79% -> **93.41%**, now
+essentially at parity with CE's 93.36% (was a 1.6pp gap, now CE and
+ArcFace are within 0.05pp of each other). A real, meaningful improvement
+from the fix alone.
+
+**Effect on faces ArcFace baseline accuracy (s=64 unchanged):** 61.79% ->
+64.94%. Helped, but nowhere near enough -- still 9.26pp behind CE's
+74.20%. The schedule bug was real and worth fixing project-wide, but it
+was not the primary explanation for the faces gap specifically (see the
+augmentation entry below for what was checked next).
+
+**Re-verification: do the committed CIFAR fc0 findings still hold under
+the fixed schedule?** Both re-run from a fresh fixed-schedule ArcFace
+checkpoint:
+
+- `random_label_clfonly`, `nc3_centred_forget` @ epoch 1: -0.8214
+  (committed) -> **-0.9109** (fixed schedule). @ final (ep3): -0.8674 ->
+  -0.9427. Not identical -- a real ~0.09 shift -- but same sign, and the
+  separation from CE's positive values (+0.33 to +0.47) *widened*, not
+  narrowed. `output_retain` stayed healthy in both (~0.92-0.94).
+- `finetune`, full backbone, 30 epochs: CE final `output_forget` 0.659
+  (committed) -> 0.654 (re-run) -- matches, as expected, since CE's
+  checkpoint was never touched by the bug. ArcFace: reached 0 by epoch 1
+  (committed, fine-grained logging) -> reaches 0 by epoch 5 at the latest
+  (re-run, coarser `trajectory_every=5`) -- consistent with, not
+  contradicting, the original finding.
+
+**Conclusion: the fc0 findings (both `finetune` and `random_label_clfonly`,
+both heads) are re-verified against the fixed schedule and hold.** No
+provisional flag needed on them going forward. The fuller sweep (fc1-3,
+both seeds, all conditions) technically still reflects pre-fix ArcFace
+checkpoints and hasn't been individually re-run, but given fc0 -- the
+original, most-scrutinized case -- came back the same or stronger under
+the fix, there's no live reason to doubt the rest of the matched-comparison
+table pending a full re-run.
+
+---
+
+## 2026-09-14 — Faces augmentation experiment: closes ArcFace's overfitting gap, doesn't move the head-to-head gap
+
+Faces ArcFace's no-margin train accuracy at epoch 40 was 99.35% against
+64.94% test (fixed schedule, s=64) -- a 34.41pp train/test gap, much wider
+than CE's own 100.00%/74.20% (25.80pp). Checked two candidate explanations
+independent of the margin loss itself, per the user's request, before
+touching `s` again.
+
+**`weight_decay`: ruled out.** Verified via the actual config loader (not
+just reading YAML) that all four configs -- `cifar_ce`, `cifar_arcface`,
+`faces_ce`, `faces_arcface` -- resolve to `weight_decay: 0.0005`. `faces_ce.yaml`
+doesn't override it; it inherits `base.yaml`'s default, identical to
+CIFAR's. No CIFAR-vs-faces discrepancy exists in this setting.
+
+**Augmentation: a real gap found and fixed.** `src/data.py`'s
+`cifar_transforms` applies `RandomCrop(32, padding=4)` + flip for training;
+`face_transforms` applied flip *only* -- no translation jitter at all,
+so the model saw the exact same pixel-aligned crop of every face every
+epoch. Added `RandomCrop(size, padding=8)` before the flip, the same idiom
+as CIFAR's own augmentation scaled to the face image size -- pure
+translation jitter, no scale or aspect-ratio distortion (unlike
+`RandomResizedCrop`), consistent with the existing docstring's caution
+against aggressive augmentation changing identity-relevant appearance.
+
+Retrained both faces heads (s=64, m=0.5, fixed schedule) with the new
+augmentation:
+
+| | train acc | test acc | gap |
+|---|---|---|---|
+| CE, no augmentation | 100.00% | 74.20% | 25.80pp |
+| CE, with augmentation | 99.97% | 74.65% | 25.32pp |
+| ArcFace, no augmentation | 99.35% | 64.94% | 34.41pp |
+| ArcFace, with augmentation | **90.98%** | 64.63% | **26.35pp** |
+
+**Augmentation worked exactly as regularization should -- for ArcFace,
+substantially.** Its train accuracy dropped a real 8.37pp (99.35% ->
+90.98%), closing the train/test gap by 8.06pp. CE barely moved (it wasn't
+overfitting as severely to begin with).
+
+**But test accuracy itself did not move, for either head** (CE +0.45pp,
+ArcFace -0.31pp, both noise-level), **and the CE-vs-ArcFace head-to-head
+gap is unchanged**: 9.26pp (no augmentation) -> 10.02pp (with
+augmentation). ArcFace now generalizes better relative to its own
+(less-memorized) training fit, but not better relative to CE.
+
+**Conclusion: `weight_decay` and augmentation are both ruled out as
+explanations for the CE-vs-ArcFace head-to-head test-accuracy gap at
+faces scale.** Two independent, real, working fixes, neither of which
+closed the gap that actually matters for the comparison. `s`/`m` remains
+the more likely lever -- an `s=96` attempt (augmentation kept, fixed
+schedule) is in progress as this entry is being written; not yet reported
+here.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO

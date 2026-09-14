@@ -7,7 +7,7 @@ data:
   image_size: 112
   batch_size: 128
   max_identities: 1000        # subset hard -- you do not need a SOTA model
-  min_images: 20
+  min_images: 40
   max_images_per_identity: 50
   test_fraction: 0.2          # split BY IMAGE within each identity, so the
                               # test set still contains the forgotten person

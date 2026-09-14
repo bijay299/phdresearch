@@ -131,6 +131,19 @@ what it found (done / still running / timed out) rather than looping
 forever on the assumption that "still running" is the only outcome worth
 coding for.
 
+**Multiple GPUs may be used concurrently, but only for genuinely
+independent jobs** -- different seeds, different heads, jobs that don't
+read or write the same checkpoint or the same run directory. Before
+launching anything in parallel, state explicitly which GPU each job uses
+and confirm their output paths don't overlap. Never launch two jobs that
+could write to the same `RunDir` target, even on different GPUs -- `RunDir`
+refuses a second writer to the same directory (see the entry above this
+one), but two jobs racing to create it at once is still worth avoiding by
+construction, not by relying on whichever loses the race to fail loudly.
+This machine is shared with other users -- always check `nvidia-smi`
+before every launch, sequential or parallel, and never touch a GPU that
+already shows another process's usage.
+
 ---
 
 ## Layout
