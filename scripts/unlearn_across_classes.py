@@ -142,7 +142,8 @@ def run_condition(cfg: dict, head_name: str, backbone0, head0, num_classes: int,
 
 
 def main(cfg: dict, forget_classes: list[int], ckpt_path: Path,
-        finetune_epochs: int, finetune_trajectory_every: int) -> None:
+        finetune_epochs: int, finetune_trajectory_every: int,
+        conditions: list[str] = ("finetune", "random_label_clfonly")) -> None:
     device = resolve_device(cfg.get("device", "auto"))
     set_seed(cfg["seed"])   # once, up front -- matches run_experiment.py's
                             # own convention: RNG evolves naturally across
@@ -157,20 +158,22 @@ def main(cfg: dict, forget_classes: list[int], ckpt_path: Path,
     u = cfg["unlearn"]
 
     for fc in forget_classes:
-        run_condition(cfg, head_name, backbone0, head0, num_classes, train_ds,
-                      train_eval_loader, test_loader, device, fc,
-                      method="finetune", classifier_only=False,
-                      epochs=finetune_epochs, lr=u["lr"],
-                      weight_decay=u["weight_decay"],
-                      trajectory_every=finetune_trajectory_every,
-                      bs=bs, nw=nw, out_dir=cfg["out_dir"])
+        if "finetune" in conditions:
+            run_condition(cfg, head_name, backbone0, head0, num_classes, train_ds,
+                          train_eval_loader, test_loader, device, fc,
+                          method="finetune", classifier_only=False,
+                          epochs=finetune_epochs, lr=u["lr"],
+                          weight_decay=u["weight_decay"],
+                          trajectory_every=finetune_trajectory_every,
+                          bs=bs, nw=nw, out_dir=cfg["out_dir"])
 
-        run_condition(cfg, head_name, backbone0, head0, num_classes, train_ds,
-                      train_eval_loader, test_loader, device, fc,
-                      method="random_label", classifier_only=True,
-                      epochs=u["epochs"], lr=u["lr"],
-                      weight_decay=u["weight_decay"], trajectory_every=1,
-                      bs=bs, nw=nw, out_dir=cfg["out_dir"])
+        if "random_label_clfonly" in conditions:
+            run_condition(cfg, head_name, backbone0, head0, num_classes, train_ds,
+                          train_eval_loader, test_loader, device, fc,
+                          method="random_label", classifier_only=True,
+                          epochs=u["epochs"], lr=u["lr"],
+                          weight_decay=u["weight_decay"], trajectory_every=1,
+                          bs=bs, nw=nw, out_dir=cfg["out_dir"])
 
 
 if __name__ == "__main__":
@@ -188,11 +191,19 @@ if __name__ == "__main__":
                          "condition (default 30 -- 3 wasn't enough to see "
                          "whether CE converges, see notes/decisions.md 2026-09-13)")
     ap.add_argument("--finetune-trajectory-every", type=int, default=5)
+    ap.add_argument("--conditions", default="finetune,random_label_clfonly",
+                    help="comma-separated subset of {finetune,"
+                         "random_label_clfonly} to run (default: both)")
     ap.add_argument("--set", nargs="*", default=[], metavar="k.v=VAL")
     a = ap.parse_args()
 
     cfg = apply_overrides(load_config(a.config), a.set)
     classes = [int(c) for c in a.forget_classes.split(",")]
+    conditions = a.conditions.split(",")
+    unknown = set(conditions) - {"finetune", "random_label_clfonly"}
+    if unknown:
+        raise ValueError(f"unknown --conditions {sorted(unknown)}; "
+                         f"expected a subset of finetune,random_label_clfonly")
 
     if a.ckpt is not None:
         ckpt_path = Path(a.ckpt)
@@ -200,4 +211,5 @@ if __name__ == "__main__":
         run_name = f"{cfg['data']['name']}_{cfg['head']['name']}_seed{cfg['seed']}"
         ckpt_path = Path(cfg["out_dir"]) / run_name / "ckpt.pt"
 
-    main(cfg, classes, ckpt_path, a.finetune_epochs, a.finetune_trajectory_every)
+    main(cfg, classes, ckpt_path, a.finetune_epochs, a.finetune_trajectory_every,
+        conditions=conditions)

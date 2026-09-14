@@ -625,6 +625,57 @@ already trained for the given config.
 
 ---
 
+## 2026-09-14 — random_label_clfonly confirmed at a second seed, all 4 classes
+
+Reran `random_label_clfonly` at forget_class 0-3, both heads, at seed=1 --
+a genuinely different backbone init and data order, not just a different
+forget class on the seed=0 checkpoint. Required training fresh CE and
+ArcFace baselines at seed=1 first (`scripts/run_experiment.py --set seed=1
+unlearn.enabled=false`, ~4 min each): the seed=0 checkpoints can't be
+reused for this, since the seed affects backbone init and data order and
+the question is specifically whether the pattern survives a different
+trained model, not just a different forget class on the same one.
+
+**Holds at every class, both seeds:** CE stays positive at epoch 1 in
+every seed=1 case (+0.4379 to +0.4842). ArcFace flips negative in every
+seed=1 case (-0.6782 to -0.9444). `output_retain` stays healthy throughout
+(seed=1 range 0.9166-0.9429), both heads, all classes -- no collapse
+confound.
+
+**Combined count, both seeds:** 2 heads x 4 classes x 2 seeds = 16
+(head, class, seed) points checked. **16 of 16 agree on the expected
+direction** (CE positive, ArcFace negative) -- verified by reading every
+trajectory.jsonl directly rather than trusting a running tally (an earlier
+verbal summary in-session said "12 of 12", which was an arithmetic slip,
+not a data problem -- corrected here).
+
+**Flagged and investigated in the same session: ArcFace fc2/seed1 is
+weaker than the other 7 ArcFace points.** Final nc3_centred_forget -0.7209
+vs -0.8418 to -0.9753 elsewhere; it also started lower at epoch 0 (+0.8956
+vs +0.9629 to +0.9993 elsewhere). Checked for a mundane explanation before
+treating it as unexplained variance:
+
+- Training/test accuracy for the seed=1 ArcFace checkpoint matches seed=0
+  closely (91.71% vs 91.79% test, final-epoch loss 5.5985 vs 5.5881) --
+  this is not a botched or under-converged run in the ordinary sense.
+- Computed nc3_centred_forget for all 10 classes (not just 0-3) on both
+  checkpoints. seed=0: tight, mean +0.962, std 0.043, min +0.848 (class 8).
+  seed=1: noticeably wider, mean +0.936, std **0.090** (~2x), min **+0.688
+  (class 8)** -- with classes 2, 7, and 8 all sitting below the other seven.
+  Class 2 is not a unique outlier; it's one of three below-average classes
+  in a checkpoint whose per-class alignment is generally less uniform than
+  seed=0's. Consistent with this checkpoint's higher nc2 (ETF deviation:
+  0.081 vs 0.051) and lower nc3_centred_mean (0.936 vs 0.962) already on
+  record.
+
+**Conclusion:** mundane and explained -- ordinary seed-to-seed variation in
+how uniformly NC collapse lands, not a defect in this run or in the
+unlearning method. Class 8 is the real outlier in the seed=1 checkpoint (a
+bigger gap than class 2's), not yet checked under `random_label_clfonly` --
+worth a look if seed=1 is extended further.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
