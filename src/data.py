@@ -398,9 +398,43 @@ def build_datasets(cfg: dict, seed: int = 0, log: Optional[Callable] = None):
     raise ValueError(f"unknown dataset '{name}'")
 
 
+class IndexedDataset(Dataset):
+    """Yields `(x, y, i)` where `i` is the position within THIS dataset.
+
+    Exists so a measurement can record which samples it actually saw, instead
+    of assuming the loader handed back the index array we expected. Hashing
+    the expected array on both sides of a comparison proves nothing -- it is
+    the same array twice. Hashing what the loader OBSERVABLY yielded catches a
+    reordering, a duplication, a dropped tail, or a silently reshuffled
+    sampler, all of which would invalidate a paired per-sample angle while
+    leaving every summary statistic looking plausible.
+
+    `i` indexes this wrapper (and so the dataset it wraps). When that dataset
+    is itself a `Subset`, map through `Subset.indices` to reach the underlying
+    image -- `base_indices` in the movement driver does exactly that.
+
+    Wrapping changes only what `__getitem__` RETURNS. It does not touch the
+    sampler, the shuffle order, worker seeding, or the transform, so a loader
+    over the wrapper visits samples in exactly the order the unwrapped loader
+    would. `src/test_data.py` pins that.
+    """
+
+    def __init__(self, ds):
+        self.ds = ds
+
+    def __len__(self) -> int:
+        return len(self.ds)
+
+    def __getitem__(self, i):
+        x, y = self.ds[i]
+        return x, y, i
+
+
 def get_targets(ds) -> np.ndarray:
     # Subsets carry no targets of their own; take the underlying dataset's and
     # reindex, so returned targets line up with the subset's own index space.
+    if isinstance(ds, IndexedDataset):
+        return get_targets(ds.ds)
     if isinstance(ds, Subset):
         return get_targets(ds.dataset)[np.asarray(ds.indices)]
     if hasattr(ds, "targets"):

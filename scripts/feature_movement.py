@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Full-model feature-movement diagnostic.
+Feature-movement diagnostic: full-model and paired frozen-backbone.
 
 THE QUESTION THIS ANSWERS
 -------------------------
@@ -19,8 +19,10 @@ WHAT IS MEASURED AT EVERY EPOCH (0..N)
   2. retain-anchored orthogonal-Procrustes-aligned displacement,
      forget and HELD-OUT retain, mean/median/p95, plus forget-minus-retain
   3. aligned forget-class-mean displacement + macro retain-class-mean control
-  4. leave-one-class-out null controls -- retain classes treated exactly as
-     the forget class is (see src/movement.py on why this is not optional)
+  4. approximate leave-one-class-out controls -- retain classes measured the
+     same WAY as the forget class. Descriptive, NOT an exchangeable null: a
+     control rotation excludes two classes, the forget rotation one. See
+     src/movement.py.
   5. linear CKA, SECONDARY, explicitly able to hide one-class movement
   6. centred AND uncentred per-class NC3
   7. output_forget / output_retain, and the linear probe
@@ -40,6 +42,22 @@ CIFAR cells are INSTRUMENTED REPLICATIONS of that condition, not bitwise
 reproductions of those rows, and are labelled as such wherever they are
 reported. `scripts/nc3_mean_robustness.py` is the script in this repo that
 does exact replay; this one deliberately does not.
+
+MODES
+-----
+Default: full-model `random_label`. `--classifier-only` freezes the backbone,
+giving the paired control -- same code, same baseline, same loaders, same
+sample stream. A pair is only a pair if both members report the SAME
+`training_trace_sha256`; the driver records it so that can be checked rather
+than assumed.
+
+EXPOSURE -- state it before comparing movement across datasets
+--------------------------------------------------------------
+`random_label` runs one step per retain batch and cycles the forget loader, so
+a small forget set is replayed far more often. Measured: 8.82 presentations
+per unique forget image per epoch on CIFAR-10 against 303.00 on faces-1000, a
+34.4x difference. `result.json` records predicted and observed counts and
+fails the run if they disagree.
 
 No checkpoint is written. The point is the trajectory, and a 3-epoch unlearned
 model is reconstructible from the baseline plus this config.
@@ -81,8 +99,65 @@ from utils import (RunDir, apply_overrides, banner, device_string,  # noqa: E402
 # `finetune` never reaches output_forget=0 on CIFAR, so finetune cannot be
 # matched across heads -- see notes/decisions.md 2026-09-13).
 UNLEARN_METHOD = "random_label"
-CLASSIFIER_ONLY = False
 SPLIT_MODE = "all"
+
+
+def classify_run(data_name: str, classifier_only: bool) -> str:
+    """What kind of run this is, for the artifact's own record.
+
+    The field used to be a hardcoded `instrumented_replication: true`, which
+    was wrong for three of the four cells it was written into. The honest
+    taxonomy:
+
+      paired_control           any frozen-backbone cell here -- these exist to
+                               be compared against their full-model twin
+      instrumented_replication CIFAR full-model: historical random_label rows
+                               exist for this condition, so this re-measures a
+                               condition already on record (not a bitwise
+                               replay -- the reseed makes it a replication)
+      new_experiment           faces full-model: no full-model unlearning
+                               condition has ever been run on either face set
+    """
+    if classifier_only:
+        return "paired_control"
+    if str(data_name).lower().startswith("cifar"):
+        return "instrumented_replication"
+    return "new_experiment"
+
+
+def exposure_accounting(n_retain: int, n_forget: int, batch_size: int,
+                        epochs: int) -> dict:
+    """Exact training exposure implied by `random_label`'s loader cycling.
+
+    One optimiser step per RETAIN batch; each step pulls one forget batch and
+    restarts the forget loader when it is exhausted. A small forget set is
+    therefore replayed far more often than a large one, which confounds any
+    cross-dataset comparison of feature movement unless it is stated. These
+    are computed from the actual split sizes, not assumed.
+    """
+    steps = -(-n_retain // batch_size)                 # ceil
+    fb = -(-n_forget // batch_size)                    # batches per forget pass
+    last = n_forget - (fb - 1) * batch_size            # short batch of a pass
+    full_passes, rem = divmod(steps, fb)
+    restarts = full_passes - (1 if rem == 0 else 0)
+    forget_pres = full_passes * n_forget
+    if rem:
+        forget_pres += min(rem, fb - 1) * batch_size + (last if rem == fb else 0)
+    return {
+        "batch_size": int(batch_size),
+        "retain_samples": int(n_retain),
+        "forget_samples": int(n_forget),
+        "retain_batches_per_epoch": int(steps),
+        "optimiser_steps_per_epoch": int(steps),
+        "natural_forget_batches_per_pass": int(fb),
+        "forget_loader_restarts_per_epoch": int(restarts),
+        "retain_presentations_per_epoch": int(n_retain),
+        "forget_presentations_per_epoch": int(forget_pres),
+        "presentations_per_unique_retain_image": n_retain / max(n_retain, 1),
+        "presentations_per_unique_forget_image": forget_pres / max(n_forget, 1),
+        "total_optimiser_steps": int(steps * epochs),
+        "total_forget_presentations": int(forget_pres * epochs),
+    }
 
 
 # ----------------------------------------------------------------------
@@ -202,15 +277,19 @@ def main(a: argparse.Namespace) -> None:
     if epochs < 1:
         raise ValueError(f"--epochs must be >= 1, got {epochs}")
 
+    classifier_only = bool(a.classifier_only)
+    mode_tag = "clfonly" if classifier_only else "full"
+    run_class = classify_run(cfg["data"]["name"], classifier_only)
     name = a.name or (
         f"{cfg['data']['name']}_{cfg['head']['name']}_seed{seed}"
-        f"_random_label_full_fc{fc}"
+        f"_random_label_{mode_tag}_fc{fc}"
     )
     # RunDir refuses a non-empty target, so a clobbered result is impossible
     # rather than merely unlikely.
     rd = RunDir.create(a.out_dir, name, dict(
         cfg, _feature_movement=True, _method=UNLEARN_METHOD,
-        _classifier_only=CLASSIFIER_ONLY, _forget_class=fc, _epochs=epochs,
+        _classifier_only=classifier_only, _run_classification=run_class,
+        _forget_class=fc, _epochs=epochs,
         _anchor_fraction=a.anchor_fraction, _anchor_seed=a.anchor_seed,
         _n_controls=a.n_controls, _baseline_run_dir=str(run_dir),
     ))
@@ -219,6 +298,8 @@ def main(a: argparse.Namespace) -> None:
     rd.log(f"  checkpoint    {ckpt_path}")
     rd.log(f"  device        {device_string()} / {device}")
     rd.log(f"  commit        {commit}")
+    rd.log(f"  mode          {'classifier-only (backbone FROZEN)' if classifier_only else 'full model'}")
+    rd.log(f"  run class     {run_class}")
 
     # ---- data ----------------------------------------------------------
     train_ds, train_eval_ds, test_ds, num_classes = D.build_datasets(
@@ -227,21 +308,34 @@ def main(a: argparse.Namespace) -> None:
     nw = cfg["data"]["num_workers"]
     # shuffle=False everywhere that feeds a measurement: identical samples in
     # identical order at every epoch is what makes a PAIRED angle meaningful.
-    train_eval_loader = D.make_loader(train_eval_ds, None, 512, False, nw)
+    # IndexedDataset so the run records which samples it ACTUALLY saw rather
+    # than re-hashing the array it asked for. Wrapping changes only what
+    # __getitem__ returns -- sampler, order and worker seeding are untouched.
+    train_eval_loader = D.make_loader(D.IndexedDataset(train_eval_ds), None,
+                                      512, False, nw)
     test_loader = D.make_loader(test_ds, None, 512, False, nw)
 
-    te_index = base_indices(train_eval_ds)
+    te_expected = np.arange(len(train_eval_ds), dtype=np.int64)
+    te_base = base_indices(train_eval_ds)
     te_targets = D.get_targets(train_eval_ds)
-    index_hash = MV.hash_indices(te_index, te_targets)
-    rd.log(f"  train_eval    {len(te_index)} samples, index sha256 "
-           f"{index_hash[:16]}...")
+    rd.log(f"  train_eval    {len(te_expected)} samples")
 
     targets = D.get_targets(train_ds)
     split = D.make_forget_split(targets, fc, SPLIT_MODE,
                                 cfg["unlearn"]["forget_fraction"], seed)
     rd.log(f"  {split.summary()}")
-    forget_loader = D.make_loader(train_ds, split.forget_idx, bs, True, nw)
-    retain_loader = D.make_loader(train_ds, split.retain_idx, bs, True, nw)
+    forget_loader = D.make_loader(D.IndexedDataset(train_ds),
+                                  split.forget_idx, bs, True, nw)
+    retain_loader = D.make_loader(D.IndexedDataset(train_ds),
+                                  split.retain_idx, bs, True, nw)
+
+    exposure = exposure_accounting(int(split.retain_idx.size),
+                                   int(split.forget_idx.size), bs, epochs)
+    rd.log(f"  exposure      {exposure['optimiser_steps_per_epoch']} steps/epoch, "
+           f"{exposure['natural_forget_batches_per_pass']} forget batches/pass, "
+           f"{exposure['forget_loader_restarts_per_epoch']} restarts/epoch, "
+           f"{exposure['presentations_per_unique_forget_image']:.2f} "
+           f"presentations per unique forget image per epoch")
 
     # Alignment anchors are chosen ONCE, over the train_eval rows, and reused
     # at every epoch -- a per-epoch redraw would make epochs incomparable.
@@ -249,9 +343,14 @@ def main(a: argparse.Namespace) -> None:
         te_targets, fc, a.anchor_fraction, a.anchor_seed)
     control_classes = MV.select_control_classes(te_targets, fc, a.n_controls,
                                                 a.anchor_seed)
+    n_retain_classes = int(len(np.unique(te_targets)) - 1)
+    exhaustive = len(control_classes) == n_retain_classes
     rd.log(f"  anchors {anchor_idx.size} / retain-eval {retain_eval_idx.size} "
-           f"/ forget {int((te_targets == fc).sum())} "
-           f"/ null controls {list(map(int, control_classes))}")
+           f"/ forget {int((te_targets == fc).sum())}")
+    rd.log(f"  CONTROL CLASSES: {len(control_classes)} of {n_retain_classes} "
+           f"retain classes "
+           f"({'exhaustive' if exhaustive else 'DETERMINISTIC SAMPLE -- descriptive, not exhaustive'})")
+    rd.log(f"  control identities: {list(map(int, control_classes))}")
 
     backbone0, head0, head_name = load_model(cfg, ckpt_path, num_classes)
 
@@ -261,22 +360,31 @@ def main(a: argparse.Namespace) -> None:
 
     def epoch_eval(bb, hd, epoch: int) -> None:
         t0 = time.time()
-        f_tr, y_tr, _p_tr = TR.extract(bb, hd, train_eval_loader, device)
+        f_tr, y_tr, _p_tr, i_tr = TR.extract_with_indices(
+            bb, hd, train_eval_loader, device)
         f_te, y_te, p_te = TR.extract(bb, hd, test_loader, device)
 
+        # Validate what the loader OBSERVABLY yielded -- duplication, omission,
+        # count and ordering are separated so the error names the failure.
+        MV.check_observed_indices(i_tr, te_expected, "train_eval")
+        if not np.array_equal(y_tr, te_targets):
+            bad = int(np.flatnonzero(y_tr != te_targets)[0])
+            raise ValueError(
+                f"train_eval: observed label at row {bad} is {y_tr[bad]}, "
+                f"dataset says {te_targets[bad]}"
+            )
+        observed_hash = MV.hash_indices(i_tr, y_tr)
         if epoch == 0:
             state["f0"] = f_tr
             state["y0"] = y_tr
-            if not np.array_equal(y_tr, te_targets):
-                raise ValueError(
-                    "extracted labels do not match the dataset's own targets; "
-                    "the train_eval loader is not yielding samples in dataset "
-                    "order and no paired angle would be valid"
-                )
-        # Reject index/label/order drift before anything is computed from it.
-        MV.check_paired(np.asarray(state["y0"]), y_tr, te_index, te_index)
-        if MV.hash_indices(te_index, y_tr) != index_hash:
-            raise ValueError("train_eval index/label hash changed mid-run")
+            state["obs_hash"] = observed_hash
+        # Paired check against epoch 0's OBSERVED stream, not the expected one.
+        MV.check_paired(np.asarray(state["y0"]), y_tr, np.asarray(state["i0"])
+                        if "i0" in state else i_tr, i_tr)
+        if observed_hash != state["obs_hash"]:
+            raise ValueError(
+                "observed train_eval index/label stream changed mid-run")
+        state["i0"] = i_tr
 
         mv = MV.movement_report(np.asarray(state["f0"]), f_tr, y_tr,
                                 num_classes, fc, anchor_idx, retain_eval_idx,
@@ -325,7 +433,7 @@ def main(a: argparse.Namespace) -> None:
             "nc3_uncentred_forget_epoch0": u0,
             "nc3_uncentred_forget_delta_vs_epoch0": float(u_forget - u0),
             "nc3_uncentred_sign_reversal_vs_epoch0": bool(u0 > 0 > u_forget),
-            "index_sha256": index_hash,
+            "observed_index_sha256": observed_hash,
             **mv,
         }
         rd.append_jsonl("trajectory.jsonl", row)
@@ -347,6 +455,26 @@ def main(a: argparse.Namespace) -> None:
             f"({time.time() - t0:.0f}s)"
         )
 
+    # ---- training trace -------------------------------------------------
+    # Hashes the exact sample stream the method trained on: retain indices,
+    # forget indices and the random targets, per step. Two runs that differ
+    # only in whether the backbone is frozen MUST produce the same hash --
+    # that is what makes the pair "paired". The trace is read-only (it draws
+    # no random numbers and touches nothing); src/test_unlearn_trace.py proves
+    # enabling it leaves parameters bitwise identical.
+    trace_state = {"h": hashlib.sha256(), "steps": 0,
+                   "retain_pres": 0, "forget_pres": 0}
+
+    def trace(epoch, step, retain_idx, forget_idx, rnd_targets, n_r, n_f):
+        h = trace_state["h"]
+        h.update(np.int64([epoch, step, n_r, n_f]).tobytes())
+        for arr in (retain_idx, forget_idx, rnd_targets):
+            h.update(b"\x00" if arr is None
+                     else np.ascontiguousarray(arr, dtype=np.int64).tobytes())
+        trace_state["steps"] += 1
+        trace_state["retain_pres"] += int(n_r)
+        trace_state["forget_pres"] += int(n_f)
+
     # ---- run ------------------------------------------------------------
     # Explicit reseed immediately before the method, so this run does not
     # inherit RNG state from any preceding condition. This is what makes the
@@ -359,7 +487,8 @@ def main(a: argparse.Namespace) -> None:
         forget_loader=forget_loader, retain_loader=retain_loader,
         num_classes=num_classes, epochs=epochs,
         lr=cfg["unlearn"]["lr"], weight_decay=cfg["unlearn"]["weight_decay"],
-        classifier_only=CLASSIFIER_ONLY, log=rd.log, epoch_eval=epoch_eval,
+        classifier_only=classifier_only, log=rd.log, epoch_eval=epoch_eval,
+        trace=trace,
     )
     method_time_s = time.time() - t0
 
@@ -368,11 +497,51 @@ def main(a: argparse.Namespace) -> None:
     first_zero = next((r["epoch"] for r in rows
                        if r["epoch"] > 0 and r["output_forget"] == 0.0), None)
 
+    measured_exposure = {
+        "observed_optimiser_steps_total": trace_state["steps"],
+        "observed_retain_presentations_total": trace_state["retain_pres"],
+        "observed_forget_presentations_total": trace_state["forget_pres"],
+        "observed_forget_presentations_per_epoch":
+            trace_state["forget_pres"] / epochs,
+        "observed_presentations_per_unique_forget_image_per_epoch":
+            trace_state["forget_pres"] / epochs / max(int(split.forget_idx.size), 1),
+    }
+    # The predicted accounting must match what actually happened, or the
+    # accounting is wrong and every exposure statement built on it is too.
+    if measured_exposure["observed_optimiser_steps_total"] != exposure["total_optimiser_steps"]:
+        raise ValueError(
+            f"exposure accounting mismatch: predicted "
+            f"{exposure['total_optimiser_steps']} steps, observed "
+            f"{measured_exposure['observed_optimiser_steps_total']}")
+    if measured_exposure["observed_forget_presentations_total"] != exposure["total_forget_presentations"]:
+        raise ValueError(
+            f"exposure accounting mismatch: predicted "
+            f"{exposure['total_forget_presentations']} forget presentations, "
+            f"observed {measured_exposure['observed_forget_presentations_total']}")
+
     rd.write_json("result.json", {
         "name": name,
-        "method": f"{UNLEARN_METHOD}_full",
-        "classifier_only": CLASSIFIER_ONLY,
-        "instrumented_replication": True,
+        "method": f"{UNLEARN_METHOD}_{mode_tag}",
+        "classifier_only": classifier_only,
+        "run_classification": run_class,
+        "training_trace_sha256": trace_state["h"].hexdigest(),
+        "exposure_predicted": exposure,
+        "exposure_observed": measured_exposure,
+        "controls": {
+            "n_control_classes": int(len(control_classes)),
+            "n_retain_classes": n_retain_classes,
+            "exhaustive": bool(exhaustive),
+            "selection": ("all retain classes" if exhaustive else
+                          "deterministic sample -- descriptive, not exhaustive"),
+            "control_class_identities": [int(c) for c in control_classes],
+            "interpretation": (
+                "APPROXIMATE leave-one-class-out controls. A control rotation "
+                "excludes two classes (forget + control); the forget rotation "
+                "excludes one. Controls are fitted on fewer anchors, so their "
+                "displacement is inflated relative to the forget class's. "
+                "Descriptive only: no significance claim, and no claim that "
+                "the forget class exceeded ALL retain classes."),
+        },
         "forget_class": fc,
         "seed": seed,
         "epochs": epochs,
@@ -396,7 +565,7 @@ def main(a: argparse.Namespace) -> None:
         },
         "splits": {
             "train_eval_n": int(len(te_index)),
-            "train_eval_index_sha256": index_hash,
+            "train_eval_observed_index_sha256": state.get("obs_hash"),
             "forget_train_n": int(split.forget_idx.size),
             "retain_train_n": int(split.retain_idx.size),
             "forget_heldout_n": int(split.forget_heldout_idx.size),
@@ -406,12 +575,13 @@ def main(a: argparse.Namespace) -> None:
             "anchor_seed": a.anchor_seed,
             "anchors_per_dim": float(anchor_idx.size
                                      / backbone0.feat_dim),
-            "null_control_classes": [int(c) for c in control_classes],
+            "control_classes": [int(c) for c in control_classes],
         },
         "timings": {"method_s": method_time_s, "per_epoch": timings},
     })
     rd.log(f"  method_time {method_time_s:.1f}s")
     rd.log(f"  first epoch with output_forget == 0: {first_zero}")
+    rd.log(f"  training trace sha256: {trace_state['h'].hexdigest()}")
     rd.log(f"run complete -> {rd.root}")
 
 
@@ -431,6 +601,9 @@ if __name__ == "__main__":
                     help="governs the anchor/eval split and null-control "
                          "selection only; the experiment seed comes from the "
                          "baseline config and is not touched here")
+    ap.add_argument("--classifier-only", action="store_true",
+                    help="freeze the backbone (paired control). Absent, the "
+                         "full-model path is taken exactly as before.")
     ap.add_argument("--n-controls", type=int, default=8,
                     help="leave-one-class-out null controls; each costs one "
                          "extra Procrustes fit per epoch")

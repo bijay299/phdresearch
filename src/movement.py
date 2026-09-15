@@ -45,12 +45,27 @@ Production sits near 40:1 (CIFAR ~22,500 anchors / 512 dims; faces-1000
 ~19,000 / 512), so the residual is small but not zero, and it points in the
 direction that would flatter the hypothesis.
 
-`null_control_angles` is the answer to it: each control class is measured
-exactly as the forget class is -- excluded from the anchor set, then scored
-under the rotation fitted without it. That yields a null distribution for
-"displacement of a class that was NOT unlearned but was treated identically".
-A forget-class number is only interpretable against that distribution, never
-against the pooled retain-eval number alone.
+`control_class_angles` measures each control class the same WAY -- excluded
+from the anchors, then scored under a rotation fitted without it -- which
+removes most of that bias. It is NOT an exact null distribution, and must not
+be described as one:
+
+  * the forget rotation is fitted on anchors that exclude ONE class (the
+    forget class, which is already absent from the anchor set);
+  * a control rotation is fitted on anchors that exclude TWO (the forget
+    class AND that control class).
+
+So a control is fitted on strictly fewer anchors than the forget class is,
+which slightly worsens its fit and inflates its measured displacement. The
+comparison is therefore **approximate and descriptive**, not exchangeable.
+`per_class[c]["n_anchor"]` records each control's actual anchor count so the
+asymmetry is visible in the artifact rather than buried here.
+
+Consequences for what may be said: these controls support statements of the
+form "the forget class's displacement is larger than that of the retain
+classes sampled here, measured this way". They support NO significance claim,
+and -- because on a large label set only a sample of control classes is
+computed -- no claim that the forget class exceeded *all* retain classes.
 
 Reflections are allowed. The full orthogonal group is used, not SO(d): a
 reflected representation carries exactly the same information, so restricting
@@ -123,6 +138,52 @@ def check_paired(labels_a: np.ndarray, labels_b: np.ndarray,
         bad = int(np.flatnonzero(labels_a != labels_b)[0])
         raise ValueError(
             f"label mismatch at row {bad}: {labels_a[bad]} vs {labels_b[bad]}"
+        )
+
+
+def check_observed_indices(observed: np.ndarray, expected: np.ndarray,
+                           what: str = "train_eval") -> None:
+    """Validate the indices a loader ACTUALLY yielded against what was asked.
+
+    Hashing the expected array on both sides of a paired comparison proves
+    nothing -- it is the same array twice. This checks the observed stream,
+    and separates the failure modes so the error says which one happened:
+    duplication, omission, count mismatch, or pure reordering. Any of them
+    invalidates a paired per-sample angle while leaving summary statistics
+    looking entirely plausible.
+    """
+    observed = np.asarray(observed)
+    expected = np.asarray(expected)
+    if observed.size != expected.size:
+        raise ValueError(
+            f"{what}: loader yielded {observed.size} samples, expected "
+            f"{expected.size} -- samples were dropped or repeated"
+        )
+    uniq, counts = np.unique(observed, return_counts=True)
+    dup = uniq[counts > 1]
+    if dup.size:
+        raise ValueError(
+            f"{what}: {dup.size} index/indices yielded more than once "
+            f"(first: {int(dup[0])} x{int(counts[counts > 1][0])})"
+        )
+    missing = np.setdiff1d(expected, observed, assume_unique=False)
+    if missing.size:
+        raise ValueError(
+            f"{what}: {missing.size} expected index/indices never yielded "
+            f"(first: {int(missing[0])})"
+        )
+    extra = np.setdiff1d(observed, expected, assume_unique=False)
+    if extra.size:
+        raise ValueError(
+            f"{what}: {extra.size} unexpected index/indices yielded "
+            f"(first: {int(extra[0])})"
+        )
+    if not np.array_equal(observed, expected):
+        bad = int(np.flatnonzero(observed != expected)[0])
+        raise ValueError(
+            f"{what}: same samples but different ORDER; first difference at "
+            f"row {bad} ({int(observed[bad])} vs {int(expected[bad])}). A "
+            f"paired angle needs matching order, not just matching membership."
         )
 
 
@@ -368,7 +429,8 @@ def class_mean_angles_deg(base_unit: np.ndarray, later_unit: np.ndarray,
 
 
 # ----------------------------------------------------------------------
-# null control: a retain class treated exactly like the forget class
+# control classes: retain classes measured the same WAY (see docstring:
+# approximate and descriptive, NOT an exact exchangeable null)
 # ----------------------------------------------------------------------
 
 def select_control_classes(labels: np.ndarray, forget_class: int,
@@ -382,17 +444,19 @@ def select_control_classes(labels: np.ndarray, forget_class: int,
     return np.sort(rng.choice(retain, size=n, replace=False))
 
 
-def null_control_angles(base_unit: np.ndarray, later_unit: np.ndarray,
+def control_class_angles(base_unit: np.ndarray, later_unit: np.ndarray,
                         labels: np.ndarray, anchor_idx: np.ndarray,
                         control_classes: Sequence[int]) -> Dict[int, Dict]:
-    """Displacement of each control class, measured exactly as the forget
-    class is: the class is dropped from the anchor set, a fresh rotation is
-    fitted on what remains, and every row of the class is then scored.
+    """Displacement of each control class, measured the same WAY as the
+    forget class: the class is dropped from the anchor set, a fresh rotation
+    is fitted on what remains, and every row of the class is then scored.
 
-    This is the null distribution the forget-class number must be read
-    against. Without it, the retain-anchored design's own positive bias (see
-    the module docstring) is indistinguishable from real forget-class
-    movement.
+    APPROXIMATE, NOT EXCHANGEABLE. A control rotation excludes two classes
+    (the forget class and the control class); the forget rotation excludes
+    one. Controls are therefore fitted on fewer anchors and their displacement
+    is inflated relative to the forget class's. `n_anchor` is returned per
+    control so the asymmetry is auditable. Use these descriptively; they
+    support no significance claim.
     """
     labels = np.asarray(labels)
     out: Dict[int, Dict] = {}
@@ -501,27 +565,32 @@ def movement_report(base_feats: np.ndarray, later_feats: np.ndarray,
     ali_f = summarize_angles(aligned[forget_idx])
     ali_r = summarize_angles(aligned[eval_idx])
 
-    nulls = (null_control_angles(base_unit, later_unit, labels, anchor_idx,
-                                 control_classes)
+    nulls = (control_class_angles(base_unit, later_unit, labels, anchor_idx,
+                                  control_classes)
              if control_classes is not None else {})
     null_means = np.array([v["mean"] for v in nulls.values()], dtype=np.float64)
 
     return {
-        "null_control_per_class": {str(k): v for k, v in nulls.items()},
-        "null_control_mean_deg": (float(null_means.mean())
+        "control_per_class": {str(k): v for k, v in nulls.items()},
+        "control_mean_deg": (float(null_means.mean())
                                   if null_means.size else float("nan")),
-        "null_control_max_deg": (float(null_means.max())
+        "control_max_deg": (float(null_means.max())
                                  if null_means.size else float("nan")),
-        "null_control_min_deg": (float(null_means.min())
+        "control_min_deg": (float(null_means.min())
                                  if null_means.size else float("nan")),
-        "null_control_n": int(null_means.size),
-        # The headline contrast: forget-class displacement measured against
-        # classes treated identically but never unlearned. Positive means the
-        # forget class moved MORE than the design's own bias explains.
-        "aligned_forget_minus_null_mean": (
+        "control_n": int(null_means.size),
+        # The headline contrast: forget-class displacement against retain
+        # classes measured the same way but never unlearned. Positive means
+        # the forget class moved more than the design's own bias explains --
+        # descriptively, and conservatively, since controls are fitted on
+        # fewer anchors (see the module docstring).
+        "aligned_forget_minus_control_mean": (
             float(ali_f["mean"] - null_means.mean())
             if null_means.size else float("nan")),
-        "aligned_forget_exceeds_null_max": (
+        # Descriptive only: "above every control COMPUTED HERE". On a large
+        # label set the controls are a sample, so this is never evidence that
+        # the forget class exceeded all retain classes, and never a p-value.
+        "aligned_forget_above_all_sampled_controls": (
             bool(ali_f["mean"] > null_means.max())
             if null_means.size else False),
         "raw_forget": raw_f,

@@ -86,6 +86,19 @@ def _step(backbone, head, x, y, sign: float = 1.0):
     return sign * F.cross_entropy(logits, y)
 
 
+def _unpack(batch):
+    """Accept `(x, y)` or `(x, y, i)` batches; return `(x, y, i_or_None)`.
+
+    Loaders over `data.IndexedDataset` yield the 3-tuple so a run can record
+    which samples it actually trained on. Plain loaders are unaffected: the
+    2-tuple path is what every existing caller takes and it behaves exactly
+    as before.
+    """
+    if len(batch) == 3:
+        return batch[0], batch[1], batch[2]
+    return batch[0], batch[1], None
+
+
 # ----------------------------------------------------------------------
 # methods
 # ----------------------------------------------------------------------
@@ -235,13 +248,41 @@ def random_label(backbone, head, forget_loader: DataLoader, retain_loader: DataL
                  device: str, num_classes: int, epochs: int = 3, lr: float = 1e-3,
                  weight_decay: float = 5e-4, classifier_only: bool = False,
                  exclude_true: bool = True, log: Optional[Callable] = None,
-                 epoch_eval: Optional[Callable] = None, **_):
+                 epoch_eval: Optional[Callable] = None,
+                 trace: Optional[Callable] = None, **_):
     """
     Relabel forget samples uniformly at random, then fine-tune normally.
 
     In the AISTATS results this was one of the two methods that left the
     representation essentially untouched (probe 92.49 vs retrain 77.35),
     so it is an important condition to include.
+
+    EXPOSURE -- quantify this before comparing movement across datasets
+    ------------------------------------------------------------------
+    One step per RETAIN batch, and each step pulls one forget batch, cycling
+    the forget loader whenever it runs out. So the forget set is replayed
+    `ceil(n_retain/bs) / ceil(n_forget/bs)` times per epoch, and a small
+    forget set is replayed far more often than a large one. At batch 128:
+
+        CIFAR-10   45,000 retain / 5,000 forget -> 352 steps, 40 batches per
+                   pass, 8 restarts, 44,096 forget presentations per epoch,
+                   8.82 per unique forget image
+        faces-1000 38,775 retain /    40 forget -> 303 steps,  1 batch per
+                   pass, 302 restarts, 12,120 forget presentations per epoch,
+                   303.00 per unique forget image
+
+    That is a 34.4x difference in gradient exposure per unique forget image.
+    Any cross-dataset comparison of feature movement is confounded by it
+    unless it is stated. `scripts/feature_movement.py` records the measured
+    counts in `result.json` rather than relying on this docstring.
+
+    `trace`, when given, is called once per step as
+    `trace(epoch, step, retain_idx, forget_idx, random_targets, n_retain, n_forget)`
+    with CPU numpy arrays. Indices are None unless the loaders are built over
+    `data.IndexedDataset`. Tracing is READ-ONLY: it draws no random numbers,
+    touches no parameter and no optimiser state, and is invoked after the
+    step's random targets already exist, so enabling it cannot change the run.
+    `src/test_unlearn_trace.py` proves that by comparing parameters bitwise.
     """
     backbone, head = _clone(backbone, head)
     backbone.to(device); head.to(device)
@@ -256,12 +297,13 @@ def random_label(backbone, head, forget_loader: DataLoader, retain_loader: DataL
         head.train()
         f_iter = iter(forget_loader)
         tot, n = 0.0, 0
-        for xr, yr in retain_loader:
+        for step, rbatch in enumerate(retain_loader):
+            xr, yr, ir = _unpack(rbatch)
             try:
-                xf, yf = next(f_iter)
+                xf, yf, if_ = _unpack(next(f_iter))
             except StopIteration:
                 f_iter = iter(forget_loader)
-                xf, yf = next(f_iter)
+                xf, yf, if_ = _unpack(next(f_iter))
 
             xr, yr = xr.to(device), yr.to(device)
             xf, yf = xf.to(device), yf.to(device)
@@ -273,6 +315,12 @@ def random_label(backbone, head, forget_loader: DataLoader, retain_loader: DataL
                 while clash.any():
                     rnd[clash] = torch.randint(0, num_classes, (int(clash.sum()),), device=device)
                     clash = rnd == yf
+
+            if trace is not None:
+                trace(ep, step,
+                      None if ir is None else ir.cpu().numpy(),
+                      None if if_ is None else if_.cpu().numpy(),
+                      rnd.cpu().numpy(), int(yr.numel()), int(yf.numel()))
 
             loss = _step(backbone, head, xr, yr) + _step(backbone, head, xf, rnd)
             opt.zero_grad(set_to_none=True); loss.backward(); opt.step()

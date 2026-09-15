@@ -104,6 +104,35 @@ def extract(backbone: nn.Module, head: nn.Module, loader: DataLoader,
     return np.concatenate(feats), np.concatenate(labs), np.concatenate(preds)
 
 
+@torch.no_grad()
+def extract_with_indices(backbone: nn.Module, head: nn.Module,
+                         loader: DataLoader, device: str
+                         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """`extract`, plus the sample indices the loader ACTUALLY yielded.
+
+    Requires a loader over `data.IndexedDataset`, whose batches are
+    `(x, y, i)`. Returns (features, labels, predictions, indices).
+
+    The point is the fourth return value. A paired per-sample measurement is
+    only valid if both sides saw the same samples in the same order, and the
+    only way to know that is to record what came back rather than what was
+    asked for. Everything else here is `extract` unchanged -- the head is
+    still called without labels, so no margin is applied.
+    """
+    backbone.eval(); head.eval()
+    feats, labs, preds, idxs = [], [], [], []
+    for x, y, i in loader:
+        x = x.to(device, non_blocking=True)
+        f = backbone(x)
+        p = head(f).argmax(1)
+        feats.append(f.cpu().numpy())
+        labs.append(y.numpy())
+        preds.append(p.cpu().numpy())
+        idxs.append(np.asarray(i))
+    return (np.concatenate(feats), np.concatenate(labs),
+            np.concatenate(preds), np.concatenate(idxs))
+
+
 def output_accuracy(labels: np.ndarray, preds: np.ndarray,
                     target_class: Optional[int]) -> Dict[str, float]:
     out = {"overall": float((preds == labels).mean())}

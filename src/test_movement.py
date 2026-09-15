@@ -197,9 +197,27 @@ def test_forget_only_movement():
           > r["aligned_class_mean_retain_macro_deg"] + 5.0)
     check("class-mean forget-minus-retain positive",
           r["aligned_class_mean_forget_minus_retain_deg"] > 5.0)
-    check("forget exceeds every null control", r["aligned_forget_exceeds_null_max"])
-    check("forget-minus-null clearly positive",
-          r["aligned_forget_minus_null_mean"] > 9.0)
+    check("forget exceeds every sampled control", r["aligned_forget_above_all_sampled_controls"])
+    check("forget-minus-control clearly positive",
+          r["aligned_forget_minus_control_mean"] > 9.0)
+
+
+def test_controls_are_fitted_on_fewer_anchors():
+    """The asymmetry that makes these descriptive, not exchangeable: a control
+    rotation excludes forget AND the control class; the forget rotation
+    excludes only forget. Recorded per control so it is auditable."""
+    print("controls: fitted on strictly fewer anchors than the forget class")
+    f, labels = big_toy()
+    a, _e = split(labels, 0)
+    cc = MV.select_control_classes(labels, FORGET, K - 1, 0)
+    nulls = MV.control_class_angles(MV.unit_rows(f), MV.unit_rows(f), labels, a, cc)
+    check("every control has fewer anchors than the forget rotation",
+          all(v["n_anchor"] < a.size for v in nulls.values()))
+    check("n_anchor is recorded for every control",
+          all("n_anchor" in v for v in nulls.values()))
+    check("the deficit equals that class's anchor count",
+          all(nulls[int(c)]["n_anchor"] == a.size - int((labels[a] == c).sum())
+              for c in cc))
 
 
 def test_forget_only_movement_hides_in_cka():
@@ -221,7 +239,7 @@ def test_forget_only_movement_hides_in_cka():
 # ----------------------------------------------------------------------
 
 def test_equal_movement():
-    print("equal forget/retain movement: forget sits inside the null spread")
+    print("equal forget/retain movement: forget sits inside the control spread")
     f, labels = big_toy()
     rng = np.random.default_rng(13)
     moved = f + 0.25 * rng.normal(size=f.shape)  # independent, not a rotation
@@ -231,11 +249,11 @@ def test_equal_movement():
           r["aligned_retain_eval"]["mean"] > 10.0)
     check("independent noise is NOT absorbed by alignment",
           r["aligned_retain_eval"]["mean"] > 10.0)
-    check("null controls were computed", r["null_control_n"] == K - 1)
-    check("forget does NOT exceed the null maximum",
-          not r["aligned_forget_exceeds_null_max"])
-    check("forget-minus-null is small (<2 deg)",
-          abs(r["aligned_forget_minus_null_mean"]) < 2.0)
+    check("controls were computed", r["control_n"] == K - 1)
+    check("forget does NOT exceed the control maximum",
+          not r["aligned_forget_above_all_sampled_controls"])
+    check("forget-minus-control is small (<2 deg)",
+          abs(r["aligned_forget_minus_control_mean"]) < 2.0)
 
 
 def test_equal_movement_bias_is_bounded_at_production_ratio():
@@ -247,12 +265,12 @@ def test_equal_movement_bias_is_bounded_at_production_ratio():
     bias = r["aligned_forget_minus_retain_mean"]
     check("pooled forget-minus-retain is biased positive, not zero", bias > 0.0)
     check("but under 2 deg at a production anchor ratio", bias < 2.0)
-    check("the null control absorbs most of that bias",
-          abs(r["aligned_forget_minus_null_mean"]) < abs(bias))
+    check("the controls absorb most of that bias",
+          abs(r["aligned_forget_minus_control_mean"]) < abs(bias))
 
 
-def test_null_control_properties():
-    print("null control: deterministic, forget-free, anchor-free by class")
+def test_control_class_properties():
+    print("controls: deterministic, forget-free, anchor-free by class")
     f, labels = big_toy()
     cc = MV.select_control_classes(labels, FORGET, 3, 0)
     check("never selects the forget class", FORGET not in cc)
@@ -267,7 +285,7 @@ def test_null_control_properties():
 
     a, _e = split(labels, 0)
     u = MV.unit_rows(f)
-    nulls = MV.null_control_angles(u, u.copy(), labels, a, cc)
+    nulls = MV.control_class_angles(u, u.copy(), labels, a, cc)
     check("identical features -> every control ~0",
           all(v["mean"] < 1e-8 for v in nulls.values()))
     for c in cc:
@@ -543,10 +561,11 @@ def main():
         test_global_scale,
         test_per_sample_scale,
         test_forget_only_movement,
+        test_controls_are_fitted_on_fewer_anchors,
         test_forget_only_movement_hides_in_cka,
         test_equal_movement,
         test_equal_movement_bias_is_bounded_at_production_ratio,
-        test_null_control_properties,
+        test_control_class_properties,
         test_pairing_guards,
         test_shuffled_features_move,
         test_index_hash,
