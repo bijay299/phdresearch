@@ -448,7 +448,7 @@ def main(a: argparse.Namespace) -> None:
             f"out_r {row['output_retain']:.4f}  "
             f"aligned_fgt {mv['aligned_forget']['mean']:.3f} deg  "
             f"aligned_ret {mv['aligned_retain_eval']['mean']:.3f} deg  "
-            f"null {mv['null_control_mean_deg']:.3f} deg  "
+            f"ctrl {mv[MV.CONTROL_MEAN_KEY]:.3f} deg  "
             f"nc3_c {row['nc3_centred_forget']:+.4f}  "
             f"nc3_u {row['nc3_uncentred_forget']:+.4f}  "
             f"cka {mv['cka_linear_secondary']:.4f}  "

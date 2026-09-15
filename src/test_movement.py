@@ -507,6 +507,32 @@ def test_rotate_means_equals_rotate_features():
     check("counts sum to n", counts.sum() == labels.size)
 
 
+def test_report_log_keys_exist():
+    """Guard against the failure that killed a launched GPU run: a field was
+    renamed in movement.py and a stale f-string was left in the driver's log
+    line, which nothing unit-tested. Every key any caller formats directly
+    must be present in a real report."""
+    print("report keys: every key the driver formats is actually produced")
+    f, labels = big_toy()
+    rng = np.random.default_rng(61)
+    r = report(f, f + 0.2 * rng.normal(size=f.shape), labels)
+    for k in MV.REPORT_LOG_KEYS:
+        check(f"'{k}' present", k in r)
+    check("control mean key points at a real field",
+          MV.CONTROL_MEAN_KEY in r)
+    check("no stale 'null_control_*' keys remain",
+          not any(k.startswith("null_control") for k in r))
+    check("no stale 'exceeds_null' key remains",
+          not any("exceeds_null" in k for k in r))
+
+    # The driver's own log line must format cleanly against a real report.
+    line = (f"ctrl {r[MV.CONTROL_MEAN_KEY]:.3f} deg "
+            f"fgt {r['aligned_forget']['mean']:.3f} "
+            f"ret {r['aligned_retain_eval']['mean']:.3f} "
+            f"cka {r['cka_linear_secondary']:.4f}")
+    check("driver log line formats", isinstance(line, str) and len(line) > 10)
+
+
 def test_cka_bounds():
     print("CKA: 1 for identical, lower for unrelated")
     f, _labels = toy()
@@ -577,6 +603,7 @@ def main():
         test_known_angles,
         test_chunking_invariance,
         test_rotate_means_equals_rotate_features,
+        test_report_log_keys_exist,
         test_cka_bounds,
         test_summarize,
         test_shape_guards,

@@ -105,6 +105,20 @@ import numpy as np
 # optional in this repo.
 CHUNK_ROWS = 8192
 
+# Keys of `movement_report` that callers format directly. Named here so a
+# rename breaks at import time in the test suite rather than at epoch 0 of a
+# GPU run: renaming the control fields once left a stale f-string in the
+# driver's log line, which no unit test exercised and which killed a launched
+# run after all its setup had completed. `test_movement.py` asserts that every
+# key in this tuple is present in a real report.
+CONTROL_MEAN_KEY = "control_mean_deg"
+REPORT_LOG_KEYS = (
+    "aligned_forget", "aligned_retain_eval", CONTROL_MEAN_KEY,
+    "cka_linear_secondary", "aligned_forget_minus_control_mean",
+    "aligned_forget_above_all_sampled_controls",
+    "aligned_class_mean_forget_deg", "control_n",
+)
+
 
 # ----------------------------------------------------------------------
 # validation
