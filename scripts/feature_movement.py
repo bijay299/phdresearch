@@ -564,7 +564,8 @@ def main(a: argparse.Namespace) -> None:
             **gpu_identity(device),
         },
         "splits": {
-            "train_eval_n": int(len(te_index)),
+            "train_eval_n": int(len(te_expected)),
+            "train_eval_base_index_sha256": MV.hash_indices(te_base, te_targets),
             "train_eval_observed_index_sha256": state.get("obs_hash"),
             "forget_train_n": int(split.forget_idx.size),
             "retain_train_n": int(split.retain_idx.size),

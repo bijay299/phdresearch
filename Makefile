@@ -10,6 +10,7 @@ test:
 	python src/test_nc3_mean_robustness.py
 	python src/test_movement.py
 	python src/test_unlearn_trace.py
+	python src/test_feature_movement_driver.py
 
 # Wiring check, CPU, ~2 min.
 smoke:
