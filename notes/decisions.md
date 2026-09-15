@@ -889,6 +889,15 @@ Tight and consistently negative. **At n=40, CIFAR's flip is robust, so the
 ~40-sample class-mean estimate is not what prevents a flip on faces.** The
 divergence is real, not an artefact of a starved estimator.
 
+> **Superseded as the authoritative result (2026-09-15).** The scratch
+> numbers immediately above were produced ad hoc and their sampling seed was
+> never recorded, so their individual trials cannot be reproduced. They are
+> kept here as historical evidence of what was checked and when. The
+> authoritative result is now the committed, reproducible artifact described
+> in "2026-09-15 — Reproducible 40-image NC3 class-mean robustness
+> diagnostic" below, which reaches the same qualitative conclusion from a
+> verified exact replay of the canonical model.
+
 **Separate limitation, still standing:** `output_forget` and
 `probe_forget` on faces have 0.1 granularity -- identities have 8-10 test
 images each (min 8, max 10, mean 9.70, median 10), against CIFAR's ~1,000
@@ -1387,6 +1396,109 @@ ArcFace did not flip at all.
 **Supersedes:** the "remaining 3 — ArcFace seed-0, fc1/fc2/fc3 — are still
 pre-fix" caveat in the 2026-09-14 seed-1 entry, and that entry's
 attribution of fc2's behaviour to a per-class property.
+
+---
+
+## 2026-09-15 — Reproducible 40-image NC3 class-mean robustness diagnostic
+
+**Purpose.** Test whether a forget-class mean estimated from only 40
+training images — the per-identity budget on the face set — can make the
+CIFAR ArcFace nc3 flip disappear. If it can, the CIFAR-versus-faces
+divergence reported on 2026-09-14 is an estimator artefact rather than a
+real difference between the datasets. This run replaces the ad-hoc check in
+that entry with a committed, reproducible artifact.
+
+**Provenance.**
+
+| item | value |
+|---|---|
+| diagnostic code | `scripts/nc3_mean_robustness.py` at commit `77e58f3`, clean tree |
+| baseline run | `logs/postfix_seed0_clean/cifar10_arcface_seed0` (recorded commit `6015e37`) |
+| reference run | `logs/postfix_seed0_clean/cifar10_arcface_seed0_random_label_clfonly_fc0` (recorded commit `6015e37`) |
+| baseline checkpoint SHA-256 | `b5d408cb6f8374483d37f4d25d9ddcd6689fefe75c6030f52cabfaf148aa8742` |
+| device | NVIDIA A100-SXM4-40GB, CUDA, python 3.10.12 |
+| forget class | 0 (5,000 training images) |
+| epoch | 1 of `random_label_clfonly` |
+| K | 40 images per trial, sampled without replacement |
+| trials | 20 |
+| diagnostic sample seed | 0 (separate from the experiment seed, which stays 0) |
+| output | `logs/nc3_mean_robustness/cifar10_arcface_seed0_fc0_k40_n20_s0` |
+
+**Replay gate — passed.** The diagnostic replays one epoch of
+`random_label_clfonly` from the baseline checkpoint rather than measuring a
+same-config lookalike, and gates itself on landing on the canonical model:
+
+    canonical epoch-1 nc3_centred_forget   -0.910924935275755
+    replayed epoch-1 nc3_centred_forget    -0.910924935275755
+    replay_delta                            0.0
+    verified                                true
+    condition_prefix_executed               []   (fc0 was first in its sweep)
+
+The empty prefix matters: the reference sweep ran `--forget-classes 0,1,2,3`
+in one process, so only a first-position target can be reached exactly from
+the checkpoint. It was in first position, and the delta is exactly zero.
+
+**Trial results.** Recomputed directly from the 20 rows in `trials.jsonl`,
+independently of the `summary` block in `result.json`; the two agree.
+
+| statistic | value |
+|---|---|
+| full-data `nc3_centred_forget` (all 5,000 images) | -0.910924935275755 |
+| mean over 20 trials | -0.9011804731354751 |
+| std, ddof=1 (sample) | 0.047615275838726635 |
+| std, ddof=0 (population) | 0.046409630127141964 |
+| minimum (most negative) | -0.9673207969625082 |
+| maximum (least negative) | -0.8078338493014008 |
+| trials below 0 | 20 / 20 |
+| trials below -0.5 | 20 / 20 |
+| sign flips (value >= 0) | 0 / 20 |
+| max abs deviation from full data | 0.10309108597435424 (trial 3, -0.8078338493014008) |
+
+Max absolute deviation is our arithmetic over the trial rows, not a quantity
+the script reports. Mean, both standard deviations, min, max and both counts
+agree with `result.json`'s `summary` block to floating-point precision.
+Retain-class alignment at the same weight matrix is +0.9615065222041199, and
+`exclude_from_centre=0` is used throughout, so the centring artefact
+documented in CLAUDE.md is not in play.
+
+**Historical comparison — similar, deliberately not identical.** The scratch
+check in the 2026-09-14 faces entry reported mean -0.9008, std 0.0575, min
+-0.9693, max -0.7288, 20/20 below -0.5, 0/20 flips. That run's sampling seed
+was never recorded, so its individual trials cannot be reproduced and this is
+**not** a trial-by-trial reproduction of it. The two agree closely on the
+mean (-0.9008 vs -0.9012) and on both counts. They differ in spread and
+extremes; because the scratch sampling seed was not recorded, the two sets of
+draws may differ, and that is a sufficient account of the difference without
+appealing to anything else. The older numbers stay in the file as historical
+evidence; a note beside them marks this entry as the authoritative result.
+
+**Conclusion, scoped to what was measured.** For this CIFAR-10 ArcFace
+seed-0, fc0, epoch-1 model, reducing the class-mean estimator from 5,000
+training images to 40 did not change the sign in any of 20 draws, and every
+value remained below -0.5. Within this CIFAR control, reducing estimator
+sample count alone was insufficient to remove the flip. Thus, the simple
+hypothesis that 40 images are inherently too few to estimate a sign-stable
+class mean is not supported here. This does **not** establish that face
+identity means are stable at 40 images, nor rule out an interaction between
+sample count and face-specific within-class variability or geometry; a direct
+face-specific control remains necessary.
+
+**Limitations.**
+
+- One model, one class (0), one seed (0), one sample size (K=40), one epoch
+  (1). Nothing here generalises to other classes, seeds, K, or epochs.
+- The 20 trials resample the class mean from **one fixed model's features**.
+  They are not 20 independent training runs, and the spread above is
+  estimator noise only — it carries no information about run-to-run variance.
+- The diagnostic measures `nc3_centred_forget` alone. It supports no
+  inference about representation erasure, probe behaviour, or whether
+  anything was actually forgotten.
+- Replay is deterministic for this device and library versions, not bitwise
+  portable across them; both are recorded in the artifact.
+
+**Supersedes:** the scratch 40-sample numbers in the 2026-09-14 faces entry
+as the authoritative result for this check. It does not supersede that
+entry's finding, which is unchanged.
 
 ---
 
