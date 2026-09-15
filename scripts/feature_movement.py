@@ -209,6 +209,79 @@ def exposure_accounting(n_retain: int, n_forget: int, batch_size: int,
     }
 
 
+def forget_batch_sizes(n_forget: int, batch_size: int,
+                       n_steps: int) -> list:
+    """Size of the forget batch pulled at each of `n_steps` retain steps.
+
+    `random_label` pulls one forget batch per retain step and restarts the
+    forget loader when it is exhausted, so step i takes batch (i mod fb) of a
+    pass and the short final batch of a pass lands on every fb-th step. Which
+    IMAGES appear depends on the shuffle; how MANY does not, so the sizes are
+    predictable exactly and the per-step dose can be predicted before the run.
+    """
+    fb = -(-n_forget // batch_size)
+    last = n_forget - (fb - 1) * batch_size
+    return [last if (i % fb) == fb - 1 else batch_size for i in range(n_steps)]
+
+
+def dose_accounting(n_retain: int, n_forget: int, batch_size: int, epochs: int,
+                    active_steps_per_epoch: Optional[int],
+                    forget_loss_weight: float) -> dict:
+    """Predicted dose under the optional active-step / loss-weight controls.
+
+    CANDIDATE versus ACTIVE is the distinction the whole control rests on. A
+    candidate presentation is a forget image the loop pulled; an active
+    presentation is one that was actually forwarded and carried loss. With no
+    controls the two are equal, which is what the uncontrolled runs measured.
+
+    NEITHER the presentation counts NOR the weighted coefficient mass is a
+    gradient magnitude. They are counts and coefficients derived from the loop
+    structure; the gradients they produce depend on the loss surface and are
+    not measured anywhere in this script. The same warning applies to
+    `exposure_accounting` above and is repeated because the weighted numbers
+    look more like a physical dose than they are.
+    """
+    steps = -(-n_retain // batch_size)
+    sizes = forget_batch_sizes(n_forget, batch_size, steps)
+    if active_steps_per_epoch is None:
+        flags = [True] * steps
+        m = steps
+    else:
+        m = int(active_steps_per_epoch)
+        flags = UL.evenly_spaced_active_steps(steps, m)
+    lam = float(forget_loss_weight)
+    if not np.isfinite(lam) or lam <= 0.0:
+        raise ValueError(
+            f"forget_loss_weight must be finite and strictly positive, got "
+            f"{forget_loss_weight!r}")
+    candidate = int(sum(sizes))
+    active_pres = int(sum(s for s, f in zip(sizes, flags) if f))
+    return {
+        "dose_controlled": bool(active_steps_per_epoch is not None
+                                or lam != 1.0),
+        "forget_active_steps_per_epoch": int(m),
+        "forget_loss_weight": lam,
+        "retain_steps_per_epoch": int(steps),
+        "candidate_forget_presentations_per_epoch": candidate,
+        "active_forget_presentations_per_epoch": active_pres,
+        "active_forget_bearing_steps_per_epoch": int(m),
+        "active_presentations_per_unique_forget_image_per_epoch":
+            active_pres / max(n_forget, 1),
+        "total_weighted_forget_loss_coefficient_mass_per_epoch": m * lam,
+        "avg_weighted_forget_loss_coefficient_per_unique_forget_image_per_epoch":
+            m * lam / max(n_forget, 1),
+        "total_candidate_forget_presentations": candidate * epochs,
+        "total_active_forget_presentations": active_pres * epochs,
+        "total_active_forget_bearing_steps": int(m * epochs),
+        "total_weighted_forget_loss_coefficient_mass": m * lam * epochs,
+        "active_step_indices_per_epoch": [i for i, f in enumerate(flags) if f],
+        "not_a_gradient_magnitude": (
+            "Presentation counts and weighted loss coefficients are derived "
+            "from the loop structure. They are not observed gradient "
+            "magnitudes and must not be reported as such."),
+    }
+
+
 # ----------------------------------------------------------------------
 # provenance helpers
 # ----------------------------------------------------------------------
@@ -344,6 +417,8 @@ def main(a: argparse.Namespace) -> None:
         _forget_class=fc, _epochs=epochs,
         _anchor_fraction=a.anchor_fraction, _anchor_seed=a.anchor_seed,
         _n_controls=a.n_controls, _baseline_run_dir=str(run_dir),
+        _forget_active_steps_per_epoch=a.forget_active_steps_per_epoch,
+        _forget_loss_weight=a.forget_loss_weight,
     ))
     rd.log(banner(name))
     rd.log(f"  baseline      {run_dir}")
@@ -389,6 +464,33 @@ def main(a: argparse.Namespace) -> None:
            f"{exposure['forget_loader_restarts_per_epoch']} restarts/epoch, "
            f"{exposure['presentations_per_unique_forget_image']:.2f} "
            f"presentations per unique forget image per epoch")
+
+    dose = dose_accounting(int(split.retain_idx.size),
+                           int(split.forget_idx.size), bs, epochs,
+                           a.forget_active_steps_per_epoch,
+                           a.forget_loss_weight)
+    # Two independent derivations of the candidate stream. They must agree, or
+    # one of the two accountings is wrong and every dose statement is suspect.
+    if (dose["candidate_forget_presentations_per_epoch"]
+            != exposure["forget_presentations_per_epoch"]):
+        raise ValueError(
+            f"candidate accounting disagrees: dose says "
+            f"{dose['candidate_forget_presentations_per_epoch']}, exposure "
+            f"says {exposure['forget_presentations_per_epoch']} forget "
+            f"presentations per epoch")
+    rd.log(f"  dose          {'CONTROLLED' if dose['dose_controlled'] else 'uncontrolled (all steps, unit weight)'}: "
+           f"{dose['active_forget_bearing_steps_per_epoch']}/"
+           f"{dose['retain_steps_per_epoch']} active steps/epoch, "
+           f"weight {dose['forget_loss_weight']:.10g}")
+    rd.log(f"  dose          candidate {dose['candidate_forget_presentations_per_epoch']} -> "
+           f"active {dose['active_forget_presentations_per_epoch']} "
+           f"presentations/epoch "
+           f"({dose['active_presentations_per_unique_forget_image_per_epoch']:.4f} "
+           f"per unique forget image)")
+    rd.log(f"  dose          weighted coefficient mass "
+           f"{dose['total_weighted_forget_loss_coefficient_mass_per_epoch']:.6g}/epoch "
+           f"({dose['avg_weighted_forget_loss_coefficient_per_unique_forget_image_per_epoch']:.6g} "
+           f"per unique forget image) -- NOT a gradient magnitude")
 
     # Alignment anchors are chosen ONCE, over the train_eval rows, and reused
     # at every epoch -- a per-epoch redraw would make epochs incomparable.
@@ -528,6 +630,30 @@ def main(a: argparse.Namespace) -> None:
         trace_state["retain_pres"] += int(n_r)
         trace_state["forget_pres"] += int(n_f)
 
+    # ---- dose trace, separate from the candidate trace -------------------
+    # `training_trace_sha256` above stays the COMPLETE CANDIDATE stream, so it
+    # remains comparable with runs made before dose control existed and with
+    # runs at a different dose. What the schedule then DID with that stream --
+    # which steps were active, at what weight -- is a different fact and gets
+    # its own hash. Collapsing the two would make a dose change look like a
+    # sample-stream change, and the pairing gate would stop meaning anything.
+    dose_state = {"h": hashlib.sha256(), "rows": 0, "active_steps": 0,
+                  "active_pres": 0, "candidate_pres": 0, "weight_mass": 0.0}
+
+    def dose_trace(epoch, step, active, weight, forget_idx, rnd_targets, n_f):
+        h = dose_state["h"]
+        h.update(np.int64([epoch, step, 1 if active else 0, n_f]).tobytes())
+        h.update(np.float64([weight]).tobytes())
+        for arr in (forget_idx, rnd_targets):
+            h.update(b"\x00" if arr is None
+                     else np.ascontiguousarray(arr, dtype=np.int64).tobytes())
+        dose_state["rows"] += 1
+        dose_state["candidate_pres"] += int(n_f)
+        if active:
+            dose_state["active_steps"] += 1
+            dose_state["active_pres"] += int(n_f)
+            dose_state["weight_mass"] += float(weight)
+
     # ---- run ------------------------------------------------------------
     # Explicit reseed immediately before the method, so this run does not
     # inherit RNG state from any preceding condition. This is what makes the
@@ -541,7 +667,9 @@ def main(a: argparse.Namespace) -> None:
         num_classes=num_classes, epochs=epochs,
         lr=cfg["unlearn"]["lr"], weight_decay=cfg["unlearn"]["weight_decay"],
         classifier_only=classifier_only, log=rd.log, epoch_eval=epoch_eval,
-        trace=trace,
+        trace=trace, dose_trace=dose_trace,
+        forget_active_steps_per_epoch=a.forget_active_steps_per_epoch,
+        forget_loss_weight=a.forget_loss_weight,
     )
     method_time_s = time.time() - t0
 
@@ -582,6 +710,53 @@ def main(a: argparse.Namespace) -> None:
             f"{exposure['total_forget_presentations']} forget presentations, "
             f"observed {measured_exposure['observed_forget_presentations_total']}")
 
+    n_forget_unique = max(int(split.forget_idx.size), 1)
+    dose_observed = {
+        "observed_steps_total": dose_state["rows"],
+        "observed_candidate_forget_presentations_total":
+            dose_state["candidate_pres"],
+        "observed_active_forget_bearing_steps_total":
+            dose_state["active_steps"],
+        "observed_active_forget_presentations_total": dose_state["active_pres"],
+        "observed_active_presentations_per_unique_forget_image_per_epoch":
+            dose_state["active_pres"] / epochs / n_forget_unique,
+        "observed_total_weighted_forget_loss_coefficient_mass":
+            dose_state["weight_mass"],
+        "observed_weighted_forget_loss_coefficient_mass_per_epoch":
+            dose_state["weight_mass"] / epochs,
+        "observed_avg_weighted_forget_loss_coefficient_per_unique_forget_image_per_epoch":
+            dose_state["weight_mass"] / epochs / n_forget_unique,
+    }
+    # Predicted-versus-observed, on every count the dose claim rests on. If the
+    # schedule did not do what the accounting says, the accounting is fiction.
+    for label, pred, obs in (
+        ("steps", exposure["total_optimiser_steps"],
+         dose_observed["observed_steps_total"]),
+        ("candidate forget presentations",
+         dose["total_candidate_forget_presentations"],
+         dose_observed["observed_candidate_forget_presentations_total"]),
+        ("active forget-bearing steps",
+         dose["total_active_forget_bearing_steps"],
+         dose_observed["observed_active_forget_bearing_steps_total"]),
+        ("active forget presentations",
+         dose["total_active_forget_presentations"],
+         dose_observed["observed_active_forget_presentations_total"]),
+    ):
+        if pred != obs:
+            raise ValueError(
+                f"dose accounting mismatch on {label}: predicted {pred}, "
+                f"observed {obs}")
+    mass_pred = dose["total_weighted_forget_loss_coefficient_mass"]
+    mass_obs = dose_observed["observed_total_weighted_forget_loss_coefficient_mass"]
+    if abs(mass_pred - mass_obs) > 1e-9 * max(1.0, abs(mass_pred)):
+        raise ValueError(
+            f"dose accounting mismatch on weighted coefficient mass: "
+            f"predicted {mass_pred!r}, observed {mass_obs!r}")
+    rd.log(f"  dose observed {dose_observed['observed_active_forget_bearing_steps_total']} "
+           f"active steps, "
+           f"{dose_observed['observed_active_forget_presentations_total']} active "
+           f"presentations, mass {mass_obs:.6g} -- matches prediction")
+
     rd.write_json("result.json", {
         "name": name,
         "method": method_label,
@@ -595,9 +770,16 @@ def main(a: argparse.Namespace) -> None:
         # pilot.
         "update_mode": update_mode,
         "scientific_role": scientific_role,
+        # The COMPLETE CANDIDATE stream -- unchanged by dose control, so it
+        # stays comparable with runs made before dose control existed.
         "training_trace_sha256": trace_state["h"].hexdigest(),
+        # What the schedule DID with that stream: per step, the active flag and
+        # the applied weight alongside the forget indices and random targets.
+        "active_dose_trace_sha256": dose_state["h"].hexdigest(),
         "exposure_predicted": exposure,
         "exposure_observed": measured_exposure,
+        "dose_predicted": dose,
+        "dose_observed": dose_observed,
         "controls": {
             "n_control_classes": int(len(control_classes)),
             "n_retain_classes": n_retain_classes,
@@ -656,7 +838,8 @@ def main(a: argparse.Namespace) -> None:
     })
     rd.log(f"  method_time {method_time_s:.1f}s")
     rd.log(f"  first epoch with output_forget == 0: {first_zero}")
-    rd.log(f"  training trace sha256: {trace_state['h'].hexdigest()}")
+    rd.log(f"  training trace sha256:   {trace_state['h'].hexdigest()}")
+    rd.log(f"  active dose trace sha256: {dose_state['h'].hexdigest()}")
     rd.log(f"run complete -> {rd.root}")
 
 
@@ -687,6 +870,19 @@ if __name__ == "__main__":
     ap.add_argument("--n-controls", type=int, default=8,
                     help="leave-one-class-out null controls; each costs one "
                          "extra Procrustes fit per epoch")
+    ap.add_argument("--forget-active-steps-per-epoch", type=int, default=None,
+                    help="dose control: carry the forget term on only this "
+                         "many of the epoch's retain steps, chosen evenly "
+                         "spaced. Default (unset) = every step, which is the "
+                         "uncontrolled behaviour every earlier run used. The "
+                         "candidate forget batch and its random targets are "
+                         "still drawn on inactive steps, so the candidate "
+                         "training trace stays comparable.")
+    ap.add_argument("--forget-loss-weight", type=float, default=1.0,
+                    help="dose control: coefficient on the forget CE term at "
+                         "an active step (default 1.0). Must be finite and "
+                         "positive. This is a loss coefficient, NOT a "
+                         "gradient magnitude.")
     ap.add_argument("--device", default=None)
     ap.add_argument("--allow-dirty", action="store_true")
     ap.add_argument("--set", nargs="*", default=[], metavar="k.v=VAL")

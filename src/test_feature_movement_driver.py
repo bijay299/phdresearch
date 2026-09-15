@@ -113,18 +113,21 @@ def make_baseline(tmp: Path) -> Path:
 
 
 def args(run_dir, out_dir, classifier_only, n_controls=4, epochs=2,
-         scientific_role="new_experiment"):
+         scientific_role="new_experiment", name=None,
+         forget_active_steps_per_epoch=None, forget_loss_weight=1.0):
     return types.SimpleNamespace(
         run_dir=str(run_dir), ckpt=None, forget_class=0, epochs=epochs,
-        out_dir=str(out_dir), name=None, anchor_fraction=0.5, anchor_seed=0,
+        out_dir=str(out_dir), name=name, anchor_fraction=0.5, anchor_seed=0,
         classifier_only=classifier_only, n_controls=n_controls,
         scientific_role=None if classifier_only else scientific_role,
         device="cpu", allow_dirty=True, set=[],
+        forget_active_steps_per_epoch=forget_active_steps_per_epoch,
+        forget_loss_weight=forget_loss_weight,
     )
 
 
 def run_driver(run_dir, out_dir, classifier_only,
-               scientific_role="new_experiment"):
+               scientific_role="new_experiment", **kw):
     """Run the real main() with the tiny model/dataset injected."""
     import backbones as BK
     import heads as H
@@ -135,7 +138,7 @@ def run_driver(run_dir, out_dir, classifier_only,
         FM.build_backbone = lambda **kw: TinyBackbone(**kw)
         FM.build_head = lambda name, **kw: TinyHead(**kw)
         FM.main(args(run_dir, out_dir, classifier_only,
-                     scientific_role=scientific_role))
+                     scientific_role=scientific_role, **kw))
     finally:
         (D.build_datasets, BK.build_backbone, H.build_head,
          FM.D.build_datasets, FM.build_backbone, FM.build_head) = orig
