@@ -1090,6 +1090,16 @@ the `probe_forget` values recorded here (CE 0.7742-0.9200, ArcFace
 Generating the faces retrain references is a precondition for any faces
 probe number, on either dataset.
 
+> **Superseded on 2026-09-15** by "Complete face probe-gap matrix: CIFAR
+> separation does not transfer cleanly". The precondition stated here has
+> since been met: retrain references now exist for all four identities on
+> both face subsets and both heads, so `probe_gap_to_retrain*` is computable
+> and the `probe_forget` values above are no longer the only face probe
+> numbers on record. The eight faces-100 `probe_forget` values quoted here
+> are unchanged and re-used verbatim in that entry. The reasoning above --
+> that absolute probe accuracy is not evidence without a reference -- still
+> stands and is why the later entry reports gaps rather than levels.
+
 The 0.1-granularity problem from faces-1000 *is* fixed here: 20-40 test
 images per identity instead of 8-10. That improves the resolution of
 `output_forget` and `probe_forget` -- it does not make them interpretable
@@ -1591,6 +1601,11 @@ representation erasure.
   applies, and neither run speaks to the end-of-budget reading.
 - No face retrain reference exists on either dataset, so no probe gap is
   computable and no probe number on faces is interpretable.
+  > **Superseded on 2026-09-15** by "Complete face probe-gap matrix: CIFAR
+  > separation does not transfer cleanly". Retrain references now exist for
+  > all four identities on both face subsets and both heads, so face probe
+  > gaps are computable. This limitation does not otherwise affect the NC3
+  > subsampling result recorded in this entry, which never used a probe.
 - No historical dataset manifest exists. Dataset identity was checked by
   counts and folder names against the recorded `run.log` headers, not by
   content hashes.
@@ -1598,6 +1613,300 @@ representation erasure.
   not reproducible from the repository alone.
 - Both results therefore require the current dataset directory contents to
   reproduce exactly; the directories are the primary artifacts.
+
+---
+
+## 2026-09-15 — Complete face probe-gap matrix: CIFAR separation does not transfer cleanly
+
+**Decided:** With the last three faces-1000 retrain references recovered, the
+face probe-gap matrix is complete at 16 cells and is recorded here as the
+reference table. The CIFAR-10 result — consistently positive gaps, much
+larger under ArcFace — does not transfer cleanly to either face subset, and
+the two face subsets do not agree with each other. They are reported
+separately throughout and are **not** combined into one "faces" result.
+
+**Because:** every previous face probe statement in this file was blocked on
+missing retrain references (see the supersession notes on the 2026-09-14
+100-identity entry and the 2026-09-15 NC3 subsampling entry). Those
+references now exist for all four identities on both subsets and both heads.
+
+### The metric
+
+    probe_gap_to_retrain* = unlearned probe_forget - matched retrain probe_forget
+
+The asterisk is deliberate and travels with the name. **This is project
+arithmetic, not a metric defined by Gao et al.** Say so wherever it appears,
+in this file, in a table, in a slide, in the paper. "Matched" means the
+retrain reference for the same dataset, head, forget class and seed as the
+unlearned run it is subtracted from — never a reference borrowed across any
+of those four.
+
+Unlearned condition is `random_label_clfonly` throughout. Retrain is a fresh
+backbone and head trained from scratch on the retain set only.
+`output_forget` is 0.0000 in all 24 unlearned and all 24 retrain models, so
+every gap below is measured at equal output-level forgetting.
+
+### Resolution and probe protocol — read before interpreting any number
+
+**CIFAR-10 is 32x32** (native, `cifar_transforms`, 3x3 stem via
+`small_input: true`). **Only the face experiments are 112x112**
+(`image_size: 112`, standard stem). An earlier draft of this analysis
+attributed 112 px to all 24 cells; that was wrong.
+
+**The retrained backbone never saw the forget class.** It is trained on the
+retain set only, from random initialisation.
+
+**The post-hoc logistic-regression probe was then fitted on the full labelled
+training-feature set, including the forget class, and evaluated on held-out
+test images of that class.** `train_eval_loader` is built with `None` indices
+in both drivers that produced these cells
+(`scripts/unlearn_across_classes.py`, `scripts/retrain_stability.py`), so the
+probe's fitting set is the whole training set. This is why a retrained model
+scores high here: it is not recognising a class it was trained on, it is
+being handed labelled examples of that class after the fact.
+
+**CE and ArcFace probes used the same estimator, hyperparameters, fit and
+evaluation policy, and seed** — one call site (`src/train.py:192`),
+`LogisticRegression(max_iter=2000, random_state=0)`, identical fit and
+evaluation sets, no head-dependent branching. `extract` calls the head
+without labels, so no margin is applied and both heads hand the probe raw
+backbone features.
+
+**Frozen-backbone unlearning leaves the unlearned features identical to the
+original features.** `random_label_clfonly` updates the classifier only. No
+gap below is evidence of an unlearning-induced feature change, because there
+is no feature change.
+
+**Negative probe gaps do not mean better unlearning.** A negative gap says
+the retrained reference's representation was more linearly decodable for
+that class than the original's. That is a statement about the reference.
+
+**High retrain probe accuracy indicates relative linear decodability after
+labelled probe fitting; it is not evidence of representation erasure.**
+Retrain `probe_forget` spans 0.7742-1.0000 on faces-100, 0.5000-0.9000 on
+faces-1000 and 0.5440-0.8920 on CIFAR-10. Generic features appear sufficient
+to separate an identity once a probe is given labels for it, which limits
+this metric's discriminative value in this setup — most visibly on faces-100,
+where the retrain references pool to 0.8909.
+
+### Face retrain matrix — 16 cells
+
+Seed 0. `u` = unlearned (`random_label_clfonly`), `r` = retrain reference.
+Correct counts are exact integers over each identity's own test denominator;
+every `probe_forget` recorded is an exact k/denominator ratio.
+
+#### faces-100 (100 identities, `casia-webface-folders-100id`, 112x112)
+
+| head | fc | u probe | r probe | u correct | r correct | den | gap* | u outR | r outR | u probeR | r probeR | r NC3 centred | r NC3 uncentred |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ce | 0 | 0.8148 | 0.9259 | 22 | 25 | 27 | -0.1111 | 0.8217 | 0.8384 | 0.8435 | 0.8316 | +0.0445 | -0.7060 |
+| ce | 29 | 0.9200 | 0.9600 | 23 | 24 | 25 | -0.0400 | 0.8231 | 0.8417 | 0.8426 | 0.8340 | +0.0811 | -0.6465 |
+| ce | 60 | 0.7742 | 0.8065 | 24 | 25 | 31 | -0.0323 | 0.8250 | 0.8279 | 0.8440 | 0.8266 | -0.0641 | -0.6910 |
+| ce | 95 | 0.8148 | 0.8889 | 22 | 24 | 27 | -0.0741 | 0.8300 | 0.8361 | 0.8435 | 0.8339 | +0.0247 | -0.6261 |
+| arcface | 0 | 0.9259 | 0.8519 | 25 | 23 | 27 | +0.0741 | 0.8413 | 0.8631 | 0.8335 | 0.8114 | -0.9987 | -0.9912 |
+| arcface | 29 | 0.7600 | 0.9600 | 19 | 24 | 25 | -0.2000 | 0.8420 | 0.8539 | 0.8349 | 0.8067 | -0.9968 | -0.9888 |
+| arcface | 60 | 0.7742 | 0.7742 | 24 | 24 | 31 | 0.0000 | 0.8414 | 0.8581 | 0.8349 | 0.7960 | -0.9988 | -0.9916 |
+| arcface | 95 | 0.8148 | 1.0000 | 22 | 27 | 27 | -0.1852 | 0.8416 | 0.8554 | 0.8345 | 0.8078 | -0.9990 | -0.9901 |
+
+#### faces-1000 (1000 identities, `casia-webface-folders`, 112x112)
+
+| head | fc | u probe | r probe | u correct | r correct | den | gap* | u outR | r outR | u probeR | r probeR | r NC3 centred | r NC3 uncentred |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ce | 0 | 0.7000 | 0.8000 | 7 | 8 | 10 | -0.1000 | 0.7232 | 0.7455 | 0.7373 | 0.7285 | +0.0588 | -0.6605 |
+| ce | 122 | 0.7000 | 0.6000 | 7 | 6 | 10 | +0.1000 | 0.7202 | 0.7458 | 0.7373 | 0.7325 | +0.0053 | -0.6799 |
+| ce | 389 | 0.8000 | 0.8000 | 8 | 8 | 10 | 0.0000 | 0.7276 | 0.7477 | 0.7372 | 0.7284 | +0.0470 | -0.6319 |
+| ce | 794 | 0.8000 | 0.7000 | 8 | 7 | 10 | +0.1000 | 0.7238 | 0.7442 | 0.7372 | 0.7273 | -0.1041 | -0.7395 |
+| arcface | 0 | 0.7000 | 0.9000 | 7 | 9 | 10 | -0.2000 | 0.7237 | 0.7310 | 0.7025 | 0.7077 | -0.9799 | -0.9862 |
+| arcface | 122 | 0.6000 | 0.6000 | 6 | 6 | 10 | 0.0000 | 0.7232 | 0.7232 | 0.7026 | 0.7053 | -0.9795 | -0.9897 |
+| arcface | 389 | 0.7000 | 0.8000 | 7 | 8 | 10 | -0.1000 | 0.7221 | 0.7253 | 0.7025 | 0.7002 | -0.9734 | -0.9873 |
+| arcface | 794 | 0.6000 | 0.5000 | 6 | 5 | 10 | +0.1000 | 0.7241 | 0.7135 | 0.7026 | 0.6906 | -0.9625 | -0.9898 |
+
+Note the denominators. faces-1000 gives 10 test images per identity, so every
+gap there is a whole-image step of 0.1. faces-100 gives 25-31, so its steps
+are 0.032-0.040. The two subsets are not measured at the same resolution.
+
+### CIFAR-10 contextual comparison — 8 cells, reported separately
+
+The per-class CIFAR raw tables are already recorded: CE and the seed-0
+ArcFace rebuild in "2026-09-14 — CIFAR ArcFace seed-0 rebuilt post-fix", the
+seed-1 replication in "2026-09-14 — CIFAR ArcFace seed-1 re-run post-LR-fix",
+and the fc0-3 sweep in "2026-09-14 — finetune and random_label_clfonly
+patterns hold at fc0-3". They are not duplicated here. What this entry needs
+is the two group summaries, for comparison against the four face groups:
+
+| group | macro mean | sample SD | median | range | pos/zero/neg | pooled den | pooled u | pooled r | pooled signed gap* |
+|---|---|---|---|---|---|---|---|---|---|
+| CIFAR-10 CE | +0.1042 | 0.0391 | +0.0890 | +0.0780 .. +0.1610 | 4/0/0 | 4000 | 0.9207 (3683) | 0.8165 (3266) | +0.1042 (+417/4000) |
+| CIFAR-10 ArcFace | +0.3448 | 0.0421 | +0.3550 | +0.2880 .. +0.3810 | 4/0/0 | 4000 | 0.9223 (3689) | 0.5775 (2310) | +0.3448 (+1379/4000) |
+
+CIFAR-10 is 32x32; these eight cells are context for the face matrix, not
+part of it.
+
+### Six group summaries
+
+Sample SD throughout (ddof=1), over the four classes in each group. Pooled
+accuracies are total correct over total denominator.
+
+| group | macro mean | sample SD | median | range | pos/zero/neg | pooled den | pooled u | pooled r | pooled signed gap* |
+|---|---|---|---|---|---|---|---|---|---|
+| CIFAR-10 CE | +0.1042 | 0.0391 | +0.0890 | +0.0780 .. +0.1610 | 4/0/0 | 4000 | 0.9207 (3683) | 0.8165 (3266) | +0.1042 (+417/4000) |
+| CIFAR-10 ArcFace | +0.3448 | 0.0421 | +0.3550 | +0.2880 .. +0.3810 | 4/0/0 | 4000 | 0.9223 (3689) | 0.5775 (2310) | +0.3448 (+1379/4000) |
+| faces-100 CE | -0.0644 | 0.0361 | -0.0570 | -0.1111 .. -0.0323 | 0/0/4 | 110 | 0.8273 (91) | 0.8909 (98) | -0.0636 (-7/110) |
+| faces-100 ArcFace | -0.0778 | 0.1361 | -0.0926 | -0.2000 .. +0.0741 | 1/1/2 | 110 | 0.8182 (90) | 0.8909 (98) | -0.0727 (-8/110) |
+| faces-1000 CE | +0.0250 | 0.0957 | +0.0500 | -0.1000 .. +0.1000 | 2/1/1 | 40 | 0.7500 (30) | 0.7250 (29) | +0.0250 (+1/40) |
+| faces-1000 ArcFace | -0.0500 | 0.1291 | -0.0500 | -0.2000 .. +0.1000 | 1/1/2 | 40 | 0.6500 (26) | 0.7000 (28) | -0.0500 (-2/40) |
+
+### Three paired ArcFace-minus-CE summaries
+
+Paired within dataset, class by class. Computed from exact integer counts
+over each identity's denominator, not by floating-point subtraction of the
+stored accuracies — the faces-1000 fc794 difference is a rational zero and a
+float subtraction of 0.8-0.7 against 0.6-0.5 renders it as a spurious
+negative.
+
+| dataset | fc values | mean | sample SD | median | range | pos/zero/neg |
+|---|---|---|---|---|---|---|
+| CIFAR-10 | +0.2600, +0.3020, +0.2110, +0.1890 | +0.2405 | 0.0506 | +0.2355 | +0.1890 .. +0.3020 | 4/0/0 |
+| faces-100 | +0.1852, -0.1600, +0.0323, -0.1111 | -0.0134 | 0.1555 | -0.0394 | -0.1600 .. +0.1852 | 2/0/2 |
+| faces-1000 | -0.1000, -0.1000, -0.1000, 0.0000 | -0.0750 | 0.0500 | -0.1000 | -0.1000 .. 0.0000 | 0/1/3 |
+
+faces-100 order is fc0, 29, 60, 95; faces-1000 is fc0, 122, 389, 794;
+CIFAR-10 is fc0-3.
+
+**faces-1000 fc794 is exactly zero.** Both heads give a gap of exactly
+`+1/10` there (CE 8/10 unlearned against 7/10 retrain; ArcFace 6/10 against
+5/10), so the paired difference is the rational 0. Record it as `0.0000`.
+Do not record it as a signed near-zero.
+
+### Separate observation — faces-100 ArcFace `probe_retain` deficit
+
+Reported on its own because it is not part of the gap result and must not be
+folded into it.
+
+| quantity (ArcFace minus CE) | fc0 | fc29 | fc60 | fc95 | mean |
+|---|---|---|---|---|---|
+| unlearned `probe_retain` | -0.0100 | -0.0077 | -0.0090 | -0.0090 | -0.0089 |
+| retrain `probe_retain` | -0.0202 | -0.0273 | -0.0306 | -0.0260 | -0.0260 |
+
+The deficit is systematic — negative in all four identities on both sides,
+and larger on the retrain side (ArcFace retrain `probe_retain` 0.7960-0.8114
+against CE 0.8266-0.8340). It moves opposite to task accuracy: ArcFace's
+`output_retain` is *higher* than CE's on the same runs (retrain 0.8539-0.8631
+against CE 0.8279-0.8417; mean difference +0.0216 retrain, +0.0166
+unlearned).
+
+**This is not evidence of representation collapse and is not labelled as
+such.** The two heads' probes are fitted identically — same estimator, same
+hyperparameters, same fit and evaluation sets, same seed — so the difference
+is not a probe-procedure artefact. What differs is that independently fitted
+probes receive representations with different feature geometry, ArcFace's
+having been learned under a normalised angular-margin objective.
+Distinguishing that from degraded retain-class information would need a
+matched-accuracy control that has not been run.
+
+### Provenance
+
+Four tiers, separated because they are not equivalent.
+
+**Direct clean retrain references at `589b421`.** All eight faces-100 retrain
+references and five of the eight faces-1000 retrain references (CE fc0,
+fc122, fc389; ArcFace fc0, fc122). Each is a self-contained
+`scripts/retrain_stability.py` invocation naming a config tracked at that
+commit, with no command-line override of any model or data setting, training
+from scratch with no checkpoint dependency.
+
+**The three recovered faces-1000 cells at `0a92c69`.** CE fc794, ArcFace
+fc389, ArcFace fc794. Each records `0a92c69` in its own `env.json`, written
+by `RunDir` at run time on a clean tree, from a self-contained invocation
+against a config tracked at that commit. Their predecessors were killed by
+host-RAM exhaustion during evaluation and are preserved under
+`logs/failed_runs/2026-09-15_faces1000_wave2_oom/` with a SHA-256 manifest;
+those archived logs independently confirm identical overlapping training
+trajectories (CE fc794 epochs 1-11; ArcFace fc389 all 40 epochs, loss, acc
+and LR identical). The archive corroborates these cells — it is not their
+source, and they are not reconstructed from it.
+
+**Reconstructed faces-1000 baseline and unlearning provenance.** The
+faces-1000 ArcFace baseline (`logs/faces_arcface_seed0`, `ea54072`) ran with
+`--set head.s=96.0` against a config that read `s: 64.0` at that commit, so
+its effective configuration is recoverable only from the recorded `argv` and
+resolved `config.json`, not from the config file at the recorded commit. The
+unlearning sweep at `4516b1f` consumed that baseline's `ckpt.pt` and inherits
+the same status.
+
+**Reconstructed faces-100 baseline and unlearning provenance — different
+cause.** Both faces-100 baselines and both unlearning sweeps record
+`61abcbf` and invoke `configs/faces100_ce.yaml` and
+`configs/faces100_arcface.yaml`, **but neither file was tracked in git at
+`61abcbf`**; both were first committed later the same day at `6b1d54e`. The
+config text used at run time is therefore not recoverable from the repository
+at the recorded commit.
+
+In every reconstructed case the effective configuration is fully recorded in
+the run's own `config.json`, matches the HEAD config files exactly, and the
+baseline `ckpt.pt` survives. "Reconstructed" here means the run-time config
+text is not recoverable from the repository at the recorded commit. It does
+not mean the numbers are in doubt.
+
+**CIFAR provenance** spans `a963fb7`, `d67a72c`, `e5b0928` and `6015e37`.
+CIFAR CE fc0 uniquely takes both its cells from the multi-row
+`logs/cifar10_ce_seed0/results.jsonl`, written before the `RunDir` reuse
+guard (see "2026-09-14 — RunDir silently mixed configs into one results
+file"). The two rows used here (`random_label_clfonly`, `retrain`) are
+correctly labelled, but they share a file with the known mislabelled
+`finetune_ep30` row.
+
+### Conclusion, scoped to what was measured
+
+On CIFAR-10 at 32x32, `probe_gap_to_retrain*` is positive in all eight cells
+and substantially larger under ArcFace (macro +0.3448) than under CE
+(+0.1042), with the paired ArcFace-minus-CE difference positive in 4 of 4
+classes. On faces-100 at 112x112 the mean gap is negative under both heads
+(CE -0.0644, negative in 4 of 4; ArcFace -0.0778, 1 positive / 1 zero / 2
+negative), and its paired ArcFace-minus-CE differences have mixed signs (2
+positive, 2 negative) with no consistent head direction. On faces-1000 at
+112x112 the gaps cluster around zero at one-image resolution (CE +0.0250,
+that is +1 image of 40; ArcFace -0.0500, that is -2 images of 40), and its
+paired differences are non-positive in these four identities (0 positive, 1
+exactly zero, 3 negative) on a denominator of only 10 test images per
+identity. The CIFAR-10 separation between heads therefore does not transfer
+cleanly to either face subset, and the two face subsets do not agree with
+each other; they are reported separately and are not combined. These gaps are
+evidence about the relative linear decodability of the original versus the
+retrained representation once a probe has been fitted on labelled examples of
+the forget class; they are not evidence of representation erasure, and
+because the unlearning backbone is frozen they are not evidence of any
+unlearning-induced change in the features. No result here is attributed
+causally to class count, head type or dataset, and no significance claim is
+made.
+
+### Limitations
+
+- One seed (seed 0) per cell. No error bars, no seed replication on faces.
+- Four identities per group, four classes per CIFAR group. n=4.
+- Coarse face denominators: 10 test images per identity on faces-1000
+  (every gap a 0.1 step), 25-31 on faces-100.
+- Frozen-backbone unlearning (`random_label_clfonly`). The unlearned features
+  are identical to the original features, so nothing here measures
+  unlearning-induced representation movement.
+- No significance test was run, and none is implied. No distributional or
+  normality assumption is made about any spread reported above.
+- `split_mode=all` gives `forget-heldout 0` in every run, so nothing here
+  speaks to held-out generalisation.
+- The epoch-convention decision below (epoch 1 versus end of unlearning
+  budget) is still unresolved and still changes what may be quoted.
+- The faces-100 extraction seed remains unrecorded, so that subset is not
+  reproducible from the repository alone; both face results require the
+  current dataset directory contents.
+- Dataset root, class count, images per identity and identity membership all
+  covary between faces-100 and faces-1000. No comparison here separates them,
+  and none should be read as isolating any one of them.
+
+**Supersedes:** the "no probe claim is available on any face dataset" block
+in "2026-09-14 — 100-identity face subset", and the "no face retrain
+reference exists on either dataset" limitation in "2026-09-15 — Face NC3
+non-flips survive class-mean subsampling". Supersession notes are appended
+beside both; their historical text is preserved.
 
 ---
 
