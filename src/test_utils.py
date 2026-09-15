@@ -14,12 +14,13 @@ label everything else assumes is 3 epochs (see notes/decisions.md,
 2026-09-14). RunDir.create must now refuse to start rather than reuse.
 """
 
+import subprocess
 import sys, os
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from utils import RunDir
+from utils import RunDir, git_dirty_files
 
 
 def check(name, cond):
@@ -89,6 +90,51 @@ def test_rundir_create_refuses_even_a_single_stray_file():
             check("raised FileExistsError", False)
         except FileExistsError:
             check("raised FileExistsError", True)
+
+
+def test_git_dirty_files_distinguishes_clean_dirty_and_unverifiable():
+    """Scripts gate scientific execution on this, so the three cases must stay
+    distinct. The dangerous one is the third: a tree whose state git cannot
+    report must come back as None (UNKNOWN), never as an empty list, or an
+    unverifiable run would pass a cleanliness check."""
+    print("git_dirty_files: clean vs dirty vs unverifiable")
+
+    def git(*args, cwd):
+        subprocess.run(["git", *args], cwd=cwd, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    with tempfile.TemporaryDirectory() as base:
+        repo = Path(base) / "repo"
+        repo.mkdir()
+        git("init", "-q", cwd=repo)
+        git("config", "user.email", "t@example.com", cwd=repo)
+        git("config", "user.name", "t", cwd=repo)
+        (repo / "a.txt").write_text("one\n")
+        git("add", "a.txt", cwd=repo)
+        git("commit", "-qm", "init", cwd=repo)
+
+        check("a committed tree is clean (empty list, not None)",
+              git_dirty_files(cwd=repo) == [])
+
+        (repo / "a.txt").write_text("two\n")
+        modified = git_dirty_files(cwd=repo)
+        check("a modified tracked file makes it dirty",
+              modified and any("a.txt" in line for line in modified))
+
+        git("checkout", "--", "a.txt", cwd=repo)
+        check("reverting makes it clean again", git_dirty_files(cwd=repo) == [])
+
+        (repo / "untracked.txt").write_text("x\n")
+        untracked = git_dirty_files(cwd=repo)
+        check("an untracked file also counts as dirty",
+              untracked and any("untracked.txt" in line for line in untracked))
+
+        outside = Path(base) / "not_a_repo"
+        outside.mkdir()
+        result = git_dirty_files(cwd=outside)
+        check("outside a repository the answer is None (unverifiable), not []",
+              result is None)
+        check("None is distinguishable from clean", result is not [] and result is None)
 
 
 if __name__ == "__main__":

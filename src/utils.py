@@ -91,6 +91,28 @@ def git_commit() -> str:
         return "no-git"
 
 
+def git_dirty_files(cwd: str | Path | None = None) -> list[str] | None:
+    """Working-tree entries git reports as modified, staged or untracked.
+
+    Returns [] for a clean tree, a list of `git status --porcelain` lines for
+    a dirty one, and None when cleanliness could NOT be established (no git,
+    not a repo, git failed).
+
+    None is not "clean". A caller that gates scientific execution on a clean
+    tree must treat None exactly like dirty: an unverifiable tree cannot back
+    the claim that a result came from a specific commit.
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            stderr=subprocess.DEVNULL, text=True,
+            cwd=str(cwd) if cwd is not None else None,
+        )
+    except Exception:
+        return None
+    return [line for line in out.splitlines() if line.strip()]
+
+
 def device_string() -> str:
     try:
         import torch

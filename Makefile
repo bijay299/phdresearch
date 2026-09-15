@@ -7,6 +7,7 @@ test:
 	python src/test_data.py
 	python src/test_utils.py
 	python src/test_train.py
+	python src/test_nc3_mean_robustness.py
 
 # Wiring check, CPU, ~2 min.
 smoke:
