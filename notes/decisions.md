@@ -2157,6 +2157,181 @@ identity; no bitwise comparison was performed.
 
 ---
 
+## 2026-09-15 — faces-1000 dual-dose control: a dose/forgetting/utility tradeoff, not cheaper forgetting
+
+**Decided:** Record the dual-dose faces-1000 intervention as a demonstrated
+tradeoff. It does **not** supersede the uncontrolled faces pair recorded above;
+it sits beside it as a second, lower-dose point on the same baseline.
+
+### The conclusion, stated exactly
+
+At the fixed three-epoch budget, the dual-dose faces-1000 intervention
+preserved retain utility and sharply reduced feature movement, but the
+full-model member did not reach complete output forgetting: **one of ten
+forget-class test images remained correct at epoch 3.** The result therefore
+demonstrates a **dose-forgetting-utility tradeoff**. It does **not** establish
+equally effective forgetting with less utility damage, and there is **no
+matched-outcome full-versus-frozen NC3 comparison**, because no epoch exists at
+which both members show zero output forgetting.
+
+### Provenance
+
+- Commit `0f5bcc2` ("feat: add controlled random-label dose schedule"), clean
+  tree at run time (`git_dirty: false` in both artifacts).
+- Baseline run dir `logs/faces_arcface_seed0`, checkpoint
+  `logs/faces_arcface_seed0/ckpt.pt`, sha256
+  `48c19bfd2ff84d17eda447dfd73417894859b5c6a71936a8888ff8b75fea5d80`
+  (recomputed from disk during the 2026-09-15 audit).
+- Artifacts:
+  - `logs/feature_movement_dose/faces_arcface_seed0_random_label_dualdose_full_fc0`
+    (`scientific_role: new_experiment`, `update_mode: full_model`)
+  - `logs/feature_movement_dose/faces_arcface_seed0_random_label_dualdose_clfonly_fc0`
+    (`scientific_role: paired_control`, `update_mode: classifier_only`)
+- Seed 0, forget class 0, 3 epochs, ArcFace, 32-of-999 controls, one physical
+  A100 (`CUDA_VISIBLE_DEVICES=1`), members run sequentially.
+
+### Dose schedule and accounting — predicted == observed
+
+`S = 303` retain steps per epoch, `m = 9` active forget steps, selected by
+`floor((step+1)*m/S) > floor(step*m/S)` at indices
+
+    [33, 67, 100, 134, 168, 201, 235, 269, 302]
+
+with forget-loss weight `lambda = 0.3128888888888889`.
+
+| quantity | per epoch | over 3 epochs |
+|---|---|---|
+| candidate forget presentations | **12,120** | 36,360 |
+| active forget presentations | **360** | 1,080 |
+| active forget-bearing steps | 9 | 27 |
+| active presentations per unique forget image | **9** | — |
+| total weighted forget-loss coefficient mass | **2.816** | 8.448 |
+| avg weighted coefficient per unique forget image | **0.0704** | — |
+
+Predicted and observed agree exactly on all four totals in both members.
+
+**Neither the presentation counts nor the weighted coefficient is a gradient
+magnitude.** Both are counts and loss coefficients derived from the loop
+structure; actual gradients depend on the loss surface and were not measured.
+
+### Trace gates — all pass
+
+- Candidate `training_trace_sha256` equal within the pair.
+- Candidate trace **exactly equals the prior uncontrolled faces pair**:
+  `f9c5f9fdc3c6fcfdfe88a37b708d77168c0e4271f74802e38c2b780e2f707806`.
+  The dose changed what the loop did with the stream, not the stream.
+- `active_dose_trace_sha256` equal within the pair
+  (`203df28a2ac48a4264c12ea6a005ed4f7bf12a417b9c2a5c211d3a7a76026ff8`), and
+  distinct from the candidate hash.
+- Baseline checkpoint sha and observed train_eval index sha equal within the
+  pair.
+- Epoch-0 rows identical across the pair.
+
+### Epoch tables
+
+**Dual-dose full model** — epoch-0 baselines: centred **+0.8875**, uncentred
+**-0.8846**
+
+| ep | out_f | out_r | probe_f | nc3_c | nc3_u | aligned_fgt | ctrl | fgt-ctrl | cka |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | 0.7000 | 0.7272 | 0.7000 | +0.8875 | -0.8846 | 0.000 | 0.000 | +0.000 | 1.0000 |
+| 1 | 0.5000 | 0.7215 | 0.7000 | +0.6609 | -0.9022 | 1.414 | 1.269 | +0.145 | 0.9922 |
+| 2 | 0.2000 | 0.7205 | 0.7000 | +0.6243 | -0.9104 | **2.091** | 1.596 | +0.495 | 0.9879 |
+| 3 | 0.1000 | 0.7266 | 0.7000 | +0.6472 | -0.9160 | 1.865 | 1.430 | +0.436 | 0.9904 |
+
+**Dual-dose frozen backbone (paired control)**
+
+| ep | out_f | out_r | probe_f | nc3_c | nc3_u | aligned_fgt | ctrl | cka |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 0.7000 | 0.7272 | 0.7000 | +0.8875 | -0.8846 | 0.000 | 0.000 | 1.0000 |
+| 1 | 0.3000 | 0.7247 | 0.7000 | +0.9144 | -0.9081 | 0.000 | 0.000 | 1.0000 |
+| 2 | **0.0000** | 0.7248 | 0.7000 | +0.9242 | -0.9154 | 0.000 | 0.000 | 1.0000 |
+| 3 | 0.0000 | 0.7263 | 0.7000 | +0.9307 | -0.9199 | 0.000 | 0.000 | 1.0000 |
+
+What the tables say:
+
+- **Full output forget: 0.7 -> 0.5 -> 0.2 -> 0.1.** It never reaches zero.
+  At 10 test images per identity, 0.1 is one image still classified correctly.
+- **Full output retain: 0.7272 -> 0.7215 -> 0.7205 -> 0.7266.** Retain utility
+  is essentially held at baseline (-0.06pp at epoch 3).
+- **Full aligned forget movement peaks at 2.091 deg** (epoch 2), not at the end.
+- **Full centred NC3 stays positive** at every epoch (+0.6243 minimum).
+- **Frozen reaches output forget zero at epoch 2** and holds it.
+- **Frozen retain accuracy remains approximately baseline** (0.7247-0.7263
+  against 0.7272).
+- **Frozen centred NC3 remains positive** (+0.9144 to +0.9307) and **features do
+  not move**: raw paired displacement is exactly 0.000 and CKA exactly 1.0000 at
+  every epoch.
+
+**No sign reversal occurs in any row of either member, in either convention.**
+Both uncentred baselines sit at -0.8846, exactly the case the CLAUDE.md guard
+covers; every uncentred value is reported as a within-head change from that
+epoch-0 value and never as a CE-versus-ArcFace comparison.
+
+### Dual-dose versus uncontrolled, at the same epoch-3 budget
+
+| | out_f | out_r | aligned forget | nc3_c |
+|---|---|---|---|---|
+| uncontrolled full | 0.0000 | 0.6396 | 11.484 deg | +0.2473 |
+| dual-dose full | 0.1000 | **0.7266** | **1.865 deg** | **+0.6472** |
+
+The two runs share the same baseline checkpoint and the same candidate sample
+stream (identical `training_trace_sha256`), so the comparison is controlled in
+those respects. **But the intervention jointly changes two things** -- the
+active-step cadence (303 -> 9 forget-bearing steps per epoch) and the forget
+loss weight (1.0 -> 0.3128888888888889). **It cannot identify which component
+caused the change.** Read it as one lower-dose point against one higher-dose
+point, not as an attribution.
+
+### Proposed follow-up ablations — design calculations only, NOT implemented, NOT run
+
+Two ablations would separate the two components. Neither has been implemented
+or run, and neither is authorised here.
+
+1. **`m = 9, lambda = 1`.** Same active cadence and same raw active
+   presentations as the dual-dose run (9 per unique forget image per epoch),
+   without loss down-weighting. Weighted coefficient mass would be 9.0 per
+   epoch, 0.225 per unique forget image. **This isolates the effect of lambda
+   at the nine-step cadence.**
+
+2. **`m = 303, lambda = 0.009293729372937293`.** Every step remains active
+   (303 active presentations per unique forget image per epoch) while total
+   weighted coefficient exposure equals the dual-dose run's **0.0704** per
+   unique image (mass 2.816 per epoch). **Comparing this with the dual-dose run
+   tests cadence and forward exposure at matched coefficient mass.**
+
+These are **mechanistic ablations, not CIFAR-equivalent experiments**:
+optimiser cadence, data geometry and actual gradients still differ from CIFAR,
+and no cross-dataset movement-magnitude claim follows from either.
+
+**No automatic epoch extension is proposed.** Running the dual-dose condition
+longer would change cumulative dose *and* the number of retain updates at the
+same time, so a longer run would not be the same intervention observed for
+longer and would not produce a matched-outcome comparison either.
+
+### Limitations
+
+- One dataset, one identity, one seed, one head, one dose, and a fixed
+  three-epoch budget.
+- `output_forget` and `probe_forget` rest on **ten** forget-class test images,
+  so both are 0.1-granular; `probe_forget` never moved off 0.7000 in any row of
+  either member.
+- Controls are a **32-of-999 deterministic sample**, descriptive and
+  **non-exchangeable** with the forget measurement (a control rotation excludes
+  two classes, the forget rotation one; the direction of that asymmetry is not
+  established). No significance claim, and no claim about all retain classes.
+- `split_mode=all`, so nothing here speaks to held-out generalisation.
+- **Actual gradient magnitude is unmeasured.** Every dose quantity above is a
+  count or a coefficient.
+- **Incomplete full-model forgetting prevents a matched-outcome conclusion**,
+  including any statement about whether freezing alters the centred-NC3 result
+  under this dose.
+
+**Supersedes:** nothing. The uncontrolled faces pair and its
+retain-utility-loss finding stand as recorded.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
