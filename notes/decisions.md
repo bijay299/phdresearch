@@ -55,6 +55,13 @@ Fix: `exclude_from_centre=<forget_class>`.
 uncentred cosine is −1.00 and the centred one is −0.71. The theory's claim
 is about the uncentred weight. Report both and state the convention.
 
+> **Cross-reference (2026-09-15).** This remains the correct statement of
+> what the *theory* predicts. It is not a statement about empirical
+> comparability: 2026-09-11 found ArcFace's uncentred baseline already sits
+> near −0.88 before any unlearning, so uncentred values are not comparable
+> across heads and a negative one is not by itself a sign reversal. Both
+> statements stand; see 2026-09-15 — NC3 convention clarification.
+
 ---
 
 ## 2026-09-10 — CASIA-WebFace extracted, retrain baseline built, three more pipeline bugs fixed
@@ -112,7 +119,9 @@ That is the pattern worth remembering — none of these announced themselves.
    `exclude_from_centre`. *(Logged 2026-09-09.)*
 2. **Centred vs uncentred NC3 disagree** — −0.71 vs −1.00 on an exact flip.
    The theory concerns the uncentred weight. Both now reported, convention
-   stated. *(Logged 2026-09-09.)*
+   stated. *(Logged 2026-09-09; see 2026-09-11 for why uncentred values are
+   still not comparable across heads, and 2026-09-15 for the flip
+   definition.)*
 3. **`--smoke` restricted the training loader but not the forget/retain
    split.** Unlearning trained on 45k retain images while the original model
    had trained on 400. Fixed via `data.restrict_split()`.
@@ -1028,7 +1037,11 @@ Backbone frozen, so every nc3 movement below is the classifier alone.
 0.8416, CE 0.8217 / 0.8231 / 0.8250 / 0.8300 -- each within ~0.02 of its own
 head's baseline, so nothing here is a collapse artefact. Uncentred
 `nc3_uncentred_forget` at the final epoch: ArcFace -0.966 to -0.969, CE
--0.079 to -0.144.
+-0.079 to -0.144. **ArcFace's uncentred baseline on this model is already
+`nc3_uncentred_mean` -0.8778**, so -0.966 to -0.969 is **not an uncentred
+sign reversal** — it is a within-head move from an already-negative start,
+and it does not contradict the centred non-flips tabulated above (CE
+baseline for comparison: +0.6416, within-head, not head-to-head).
 
 ### The result depends on which epoch you read it at
 
@@ -1244,10 +1257,15 @@ at every epoch >= 1 in all four classes:
 | 2 | -0.6782 | **-0.8647** | -0.7209 | **-0.8983** | 0.9403 |
 | 3 | -0.9444 | **-0.8890** | -0.9558 | **-0.9039** | 0.9494 |
 
-Uncentred final `nc3_uncentred_forget` is -0.981 in all four (the
-convention the theory's prediction is actually about; the centred column is
-the same model under the global-mean-subtracted convention — both reported
-per CLAUDE.md). Retain-class alignment stays high (nc3_centred_retain_mean
+Uncentred final `nc3_uncentred_forget` is -0.981 in all four. Reported per
+CLAUDE.md, but **not** as independent proof of a flip: this ArcFace baseline
+is already at `nc3_uncentred_mean` **-0.8787** before any unlearning, so
+-0.981 is a within-head move from an already-negative starting point, not a
+sign reversal. The sign reversal above is in the **centred** column. Both are
+the same model under two conventions; the theory's prediction concerns the
+uncentred weight (see 2026-09-09), but the uncentred convention is not
+head-comparable (see 2026-09-11). Retain-class alignment stays high
+(nc3_centred_retain_mean
 +0.966 to +0.975) and `output_retain` 0.9291-0.9494 against a 0.9309
 baseline, so nothing collapsed to buy the forgetting.
 
@@ -1319,9 +1337,14 @@ every epoch >= 1 in all four classes:
 | 3 | +0.9695 | **-0.9452** | -0.9539 | -0.9812 | 0.9538 | 0.8584 |
 
 Both conventions are reported per CLAUDE.md: `nc3_c` is centred with
-`exclude_from_centre=<forget_class>`, `nc3_u` uncentred — the convention
-the theory's prediction is actually about, and where all four land at
--0.981. Retain-class alignment stays high
+`exclude_from_centre=<forget_class>`, `nc3_u` uncentred, where all four land
+at -0.981. The sign reversal is established in the **centred** column
+(+0.95..+0.97 at epoch 0 to -0.79..-0.95 at epoch 1); `nc3_u` is **not**
+independent proof of it, because this baseline's `nc3_uncentred_mean` is
+already **-0.8786** before any unlearning, so -0.981 is a within-head move
+from an already-negative start. The theory's prediction concerns the
+uncentred weight (2026-09-09); its cross-head comparability is what
+2026-09-11 rules out. Retain-class alignment stays high
 (`nc3_centred_retain_mean` +0.9599 to +0.9630) and `output_retain`
 0.9326-0.9538 against a 0.9341 baseline, so nothing collapsed to buy the
 forgetting.
@@ -1376,9 +1399,12 @@ cross-seed number enters it:
 Mean **+0.345**, sd 0.042. The gap is large and consistent at all four
 classes.
 
-**Scientific verdict, updated.** Under ArcFace the classifier weight flips
-hard away from the class mean (uncentred -0.981 at every class, both
-seeds) while the features of the forget class remain **substantially more
+**Scientific verdict, updated.** Under ArcFace the classifier weight
+undergoes a **centred NC3 sign reversal** at every class and both seeds
+(epoch 0 +0.94..+1.00 to epoch 1 -0.79..-0.95); the final uncentred value is
+-0.981, but that convention's baseline was already about **-0.879**, so it
+records a within-head deepening rather than an independent sign reversal.
+Meanwhile the features of the forget class remain **substantially more
 linearly decodable than after retraining** — a probe gap of roughly 35
 points against the retrained reference. That is a statement about how much
 class information a linear probe can still recover, not a demonstration
@@ -1390,12 +1416,18 @@ remains unverified until their reference implementation is reproduced. The
 premise that normalisation closes the shortcut is **not supported on
 CIFAR-10** — outcome (2) from CLAUDE.md is not what happened, and outcome
 (1) is not supported by the probe gap. Note also that the
-retrain references themselves sit at nc3_c -0.77 to -0.995, i.e. a
-genuinely retrained model also has a strongly anti-aligned weight for a
-class it never saw, so the flip alone does not distinguish unlearning from
-retraining — the probe gap is what does. This matches the faces result
-(2026-09-14) in direction of conclusion though not in mechanism, where
-ArcFace did not flip at all.
+retrain references themselves sit at nc3_c -0.77 to -0.995. The retrained
+backbone and head received **no positive forget-class examples**, but the
+head keeps all `num_classes` output rows (`unlearn.retrain` builds it with
+`num_classes`, and `ForgetSplit` indexes the train split without
+relabelling), so the forget-class row still participated in the softmax
+denominator and received **negative gradients from every retain example**.
+Its anti-alignment is the endpoint of negative-only optimisation, not a
+temporal flip and not an untouched random weight. Consequently **negative
+NC3 alignment alone does not distinguish the resulting models** — the probe
+gap is what does. This matches the faces result (2026-09-14) in direction of
+conclusion though not in mechanism, where ArcFace showed no centred sign
+reversal at all.
 
 **Limitations.**
 - `evaluate_light` writes only `nc3_centred_forget` to `trajectory.jsonl`,
@@ -1907,6 +1939,55 @@ in "2026-09-14 — 100-identity face subset", and the "no face retrain
 reference exists on either dataset" limitation in "2026-09-15 — Face NC3
 non-flips survive class-mean subsampling". Supersession notes are appended
 beside both; their historical text is preserved.
+
+---
+
+## 2026-09-15 — NC3 convention clarification: reversal is established in the centred metric
+
+**Decided:** A **flip** (equivalently, sign reversal) means a sign change
+between epoch 0 and epoch 1 for the **same model, same class, same
+convention**. Nothing else earns the word. All project claims of reversal are
+in the **centred** convention.
+
+**Counts, `random_label_clfonly`, epoch 0 → epoch 1, centred, from
+`trajectory.jsonl`:**
+
+| dataset | head | n | ep0 | ep1 | sign reversals |
+|---|---|---|---|---|---|
+| CIFAR-10 | ArcFace | 8 (4 cls x 2 seeds) | +0.937..+0.999 | -0.789..-0.945 | **8/8** |
+| CIFAR-10 | CE | 8 | +0.951..+0.967 | +0.408..+0.484 | **0/8** |
+| faces-100 | ArcFace | 4 | +0.686..+0.998 | -0.372..+0.611 | **1/4** |
+| faces-1000 | ArcFace | 4 | +0.854..+0.950 | +0.450..+0.979 | **0/4** |
+
+**No epoch-1 uncentred per-class values exist in current artifacts.**
+`evaluate_light` writes only `nc3_centred_forget` per epoch, and the baseline
+`original` row stores only `nc3_uncentred_mean` across all classes — never a
+per-class forget value. Uncentred epoch-1 numbers must be written as `not
+recorded`; they are never inferred from final-epoch values.
+
+**ArcFace's uncentred baselines are already about -0.88** before any
+unlearning (CIFAR -0.8786 / -0.8787, faces-100 -0.8778, faces-1000 -0.8833;
+CE's are +0.60 to +0.72). A negative post-unlearning uncentred value is
+therefore a within-head change, not a sign reversal, and raw uncentred values
+are not compared across heads. See 2026-09-11 for the mechanism.
+
+**Supported thesis, one convention throughout:** a centred NC3 reversal is
+**not necessary** for zero output-level forgetting — both face subsets reach
+`output_forget`=0 with reversal in 0/4 and 1/4 identities — and it is **not
+sufficient evidence of representation erasure**, because on CIFAR-10 ArcFace
+reverses in 8/8 points under a frozen backbone, where the representation is
+unchanged by construction. No claim is made here about necessity or
+sufficiency for "the illusion" itself.
+
+**Scope of the subsampling controls.** The class-mean subsampling runs
+(2026-09-15, both entries) directly establish sign stability **only for the
+tested fc0, seed-0, epoch-1 models** on CIFAR-10, faces-100 and faces-1000.
+They do **not** individually validate the other seven face identities; those
+rest on their single recorded trajectory each.
+
+**Still a recommendation, not a settled decision:** reporting `nc3_*_forget`
+at epoch 1 as primary with the final epoch as sensitivity. That remains open
+below and is Dr Rawat's call.
 
 ---
 

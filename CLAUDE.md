@@ -87,6 +87,17 @@ theoretical claim, so it dilutes the effect.
 **Report both. State the convention.** `train.evaluate` returns both; do not
 drop one to simplify a table.
 
+**Empirical guard — a negative uncentred value is not automatically a flip.**
+ArcFace's raw uncentred NC3 sits at roughly **-0.88 before any unlearning**,
+from the shared-component offset measured on 2026-09-11. So:
+
+- Reserve **"flip"** and **"sign reversal"** for a same-class, same-convention
+  sign change from that model's own baseline to its post-unlearning value.
+- For cross-head comparisons use **centred** NC3 — it is the head-comparable
+  quantity; both heads start near +0.96.
+- Report uncentred NC3 as a **within-head change from its own baseline**, never
+  as a raw CE-versus-ArcFace comparison.
+
 ---
 
 ## Standing rules
