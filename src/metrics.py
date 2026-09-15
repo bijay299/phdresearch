@@ -226,6 +226,40 @@ def probe_gap(method_probe_forget: float, reference_probe_forget: float) -> floa
     return float(method_probe_forget - reference_probe_forget)
 
 
+# Memory budget for the dominant temporary inside `ncc_accuracy`: the
+# (chunk_rows, n_classes, feat_dim) difference array. Deliberately a budget in
+# bytes rather than a row count, so the chunking adapts to class count and
+# feature width instead of being tuned to one dataset.
+NCC_TEMP_BUDGET_BYTES = 256 * 1024 ** 2          # 256 MiB
+
+
+def ncc_memory_plan(n_test: int, n_classes: int, feat_dim: int,
+                    itemsize: int = 8,
+                    budget_bytes: int = NCC_TEMP_BUDGET_BYTES) -> Dict[str, int]:
+    """
+    How `ncc_accuracy` will chunk a given problem shape, without allocating
+    anything. Exposed so the memory bound can be regression-tested at
+    production shapes that are far too large to actually materialise.
+
+    `legacy_temp_bytes` is what the pre-chunking implementation would have
+    needed: one (n_test, n_classes, feat_dim) array for the broadcast
+    subtraction plus a second for its square. At the faces-1000 shape
+    (9704, 1000, 512) in float64 that is ~74 GiB, which is what killed the
+    Wave-2 retrain jobs.
+    """
+    per_sample = int(n_classes) * int(feat_dim) * int(itemsize)
+    chunk_rows = max(1, int(budget_bytes) // max(per_sample, 1))
+    n_test = int(n_test)
+    rows_held = min(chunk_rows, n_test) if n_test else 0
+    return {
+        "chunk_rows": chunk_rows,
+        "n_chunks": -(-n_test // chunk_rows) if n_test else 0,
+        "peak_temp_bytes": rows_held * per_sample,
+        "legacy_temp_bytes": 2 * n_test * per_sample,
+        "budget_bytes": int(budget_bytes),
+    }
+
+
 def ncc_accuracy(train_feats: np.ndarray, train_labels: np.ndarray,
                  test_feats: np.ndarray, test_labels: np.ndarray,
                  num_classes: int, target_class: Optional[int] = None) -> Dict[str, float]:
@@ -233,13 +267,59 @@ def ncc_accuracy(train_feats: np.ndarray, train_labels: np.ndarray,
     Nearest class centre. Trains nothing at all -- assigns each test sample
     to the closest class mean. Stricter than the probe: it asks whether the
     forgotten class still occupies its own region of feature space.
+
+    Chunked over TEST SAMPLES, never over classes
+    ---------------------------------------------
+    This used to build the whole (n_test, n_classes, feat_dim) difference
+    tensor at once. `class_means` returns float64, so the broadcast is float64
+    whatever the features are, and `(...)**2` allocated a second copy of it.
+    At the faces-1000 shape that is 2 x 37 GiB, which is what exhausted host
+    memory during the Wave-2 retrain jobs (see notes/decisions.md).
+
+    The arithmetic below is unchanged: same subtraction, same square, same
+    reduction over the same contiguous axis of length feat_dim. Only the
+    number of test rows resident at once differs, and the per-element
+    pairwise summation depends on feat_dim alone, so results are bit-identical
+    to the unchunked form -- `src/test_metrics.py` asserts exactly that
+    against a local legacy reference in both float32 and float64.
+
+    Every chunk keeps ALL classes together, so each row's `argmin` still sees
+    the complete set of candidates in its original order and keeps numpy's
+    first-index-wins tie rule. Chunking over classes instead would have broken
+    ties differently and is why it is not done.
+
+    The squared-norm / matmul identity (|x|^2 - 2x.mu + |mu|^2) would cut the
+    cost further but is NOT used: it reassociates the arithmetic, so distances
+    that currently tie exactly need not tie under it, and predictions could
+    move. Direct chunking preserves the already-accepted results exactly.
     """
     mu = class_means(train_feats, train_labels, num_classes)
     present = np.where(~np.isnan(mu).any(axis=1))[0]
     M = mu[present]
 
-    d = ((test_feats[:, None, :] - M[None, :, :]) ** 2).sum(-1)
-    pred = present[d.argmin(axis=1)]
+    if M.shape[0] == 0:
+        # No class has any samples. The unchunked form reached np.argmin over
+        # an empty class axis and raised; a chunked loop would silently skip
+        # that whenever the test set is also empty, so raise it the same way
+        # -- numpy's own error, not a reworded one.
+        np.empty((test_feats.shape[0], 0), dtype=np.float64).argmin(axis=1)
+
+    n_test = test_feats.shape[0]
+    itemsize = np.result_type(test_feats.dtype, M.dtype).itemsize
+    # Budget passed explicitly, not left to the default, so it is read from the
+    # module at call time -- that is what lets the tests drive chunk_rows.
+    step = ncc_memory_plan(n_test, M.shape[0], M.shape[1], itemsize,
+                           NCC_TEMP_BUDGET_BYTES)["chunk_rows"]
+
+    nearest = np.empty(n_test, dtype=np.intp)
+    for s in range(0, n_test, step):
+        block = test_feats[s:s + step]
+        diff = block[:, None, :] - M[None, :, :]   # (chunk, n_present, feat_dim)
+        diff **= 2                                 # in place: `diff` is our own
+                                                   # fresh temporary, never a
+                                                   # view of caller data
+        nearest[s:s + step] = diff.sum(-1).argmin(axis=1)
+    pred = present[nearest]
 
     out = {"overall": float((pred == test_labels).mean())}
     if target_class is not None:
