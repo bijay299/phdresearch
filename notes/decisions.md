@@ -897,6 +897,15 @@ divergence is real, not an artefact of a starved estimator.
 > in "2026-09-15 — Reproducible 40-image NC3 class-mean robustness
 > diagnostic" below, which reaches the same qualitative conclusion from a
 > verified exact replay of the canonical model.
+>
+> **Cross-reference (2026-09-15).** The check above tested the 40-image
+> estimator on the *CIFAR* model and inferred from it that a starved
+> estimator is not what prevents a flip on faces. The face models have since
+> been tested directly -- see "2026-09-15 — Face NC3 non-flips survive
+> class-mean subsampling" below, where fc0 on this 1000-identity model holds
+> at +0.94 to +0.98 across 20 half-pool draws. The inference above is now
+> backed by evidence from the face models themselves rather than by
+> extrapolation from CIFAR.
 
 **Separate limitation, still standing:** `output_forget` and
 `probe_forget` on faces have 0.1 granularity -- identities have 8-10 test
@@ -1499,6 +1508,96 @@ face-specific control remains necessary.
 **Supersedes:** the scratch 40-sample numbers in the 2026-09-14 faces entry
 as the authoritative result for this check. It does not supersede that
 entry's finding, which is unchanged.
+
+---
+
+## 2026-09-15 — Face NC3 non-flips survive class-mean subsampling
+
+The CIFAR entry above closed the estimator question on CIFAR only. These two
+runs put the same question to the face models themselves, at the two targets
+where an exact replay is available.
+
+### Provenance
+
+Both executed at commit `1a59ca3` with a clean tree, concurrently on two
+separate A100-SXM4-40GB GPUs, diagnostic sample seed 0, 20 trials each.
+
+| | faces-100 (Run A) | faces-1000 (Run B) |
+|---|---|---|
+| baseline | `logs100/faces_arcface_seed0` (recorded `61abcbf`) | `logs/faces_arcface_seed0` (recorded `ea54072`) |
+| reference | `logs100/faces_arcface_seed0_random_label_clfonly_fc0` (`61abcbf`) | `logs/faces_arcface_seed0_random_label_clfonly_fc0` (`4516b1f`) |
+| baseline ckpt SHA-256 | `92d20ba7eb23d3a0e2a557d7202064263f332f677b846767839c03a262677c11` | `48c19bfd2ff84d17eda447dfd73417894859b5c6a71936a8888ff8b75fea5d80` |
+| output | `logs100/nc3_mean_robustness/faces100_arcface_seed0_fc0_k40_n20_s0` | `logs/nc3_mean_robustness/faces1000_arcface_seed0_fc0_k20_n20_s0` |
+
+**Both replay gates passed.** faces-100: canonical and replayed epoch-1
+`nc3_centred_forget` both **+0.61126007226103**, delta **0.0**. faces-1000:
+both **+0.9792542591275493**, delta **0.0**. `verified` is true on both and
+the executed condition prefix is empty on both, so each landed on the
+canonical model rather than a same-config lookalike.
+
+### Results
+
+Recomputed from `trials.jsonl` in each directory; both agree with the stored
+`summary` block.
+
+| | faces-100 | faces-1000 |
+|---|---|---|
+| full-data `nc3_centred_forget` | +0.61126007226103 | +0.9792542591275493 |
+| K / pool | **40 of 110** | **20 of 40** |
+| mean | +0.6431207413927054 | +0.9683103440984387 |
+| std (ddof=1) | 0.13543511115804396 | 0.012532928505315242 |
+| min | +0.39485476073452863 | +0.9419258390082438 |
+| max | +0.8505011109674718 | +0.9831519597294159 |
+| positive / non-positive | **20 / 0** | **20 / 0** |
+| above +0.5 | **18 / 20** | **20 / 20** |
+| max abs deviation from full data | 0.23924103870644187 | 0.03732842011930548 |
+
+Retain-class alignment at the same weight matrices: +0.8490 and +0.8781.
+Max absolute deviation is our arithmetic over the trial rows, not a quantity
+the script reports.
+
+### Conclusion, stated narrowly
+
+On the fixed faces-100 model, every 40-image estimate preserved the positive
+epoch-1 non-flip. On the fixed faces-1000 model, every 20-of-40 estimate
+preserved its strongly positive non-flip. **These results do not support sign
+instability from class-mean subsampling as the explanation for the observed
+non-flips in these two targets.**
+
+Run B is a half-pool noise-slope stress test. It is **not** a 40-image
+replication and **not** a CIFAR-equivalent experiment: on faces-1000 the 40
+images are the entire pool available for that identity, so there is no larger
+sample to reduce from.
+
+The larger dispersion at faces-100 (std 0.135 vs 0.013) is **not** attributed
+here to within-class variability. Sample fraction, the metric's operating
+point, feature geometry and finite-population effects all differ between the
+two runs, and this pair of runs cannot separate them.
+
+No distributional inference is drawn from these spreads -- no
+"N standard deviations from zero" claim, and no assumption that the trial
+values are normally distributed. Nothing here isolates class count, proves
+anything about the unknown population identity means, or establishes
+representation erasure.
+
+### Limitations
+
+- One identity, one model, one seed, one epoch per dataset (forget class 0,
+  seed 0, epoch 1).
+- The 20 trials per run are repeated estimates from one fixed model's
+  features, not independent training runs; the spreads are estimator noise
+  only and say nothing about run-to-run variance.
+- Epoch-1 convention only. The open epoch-convention decision below still
+  applies, and neither run speaks to the end-of-budget reading.
+- No face retrain reference exists on either dataset, so no probe gap is
+  computable and no probe number on faces is interpretable.
+- No historical dataset manifest exists. Dataset identity was checked by
+  counts and folder names against the recorded `run.log` headers, not by
+  content hashes.
+- The faces-100 extraction seed remains unrecorded, so that subset is still
+  not reproducible from the repository alone.
+- Both results therefore require the current dataset directory contents to
+  reproduce exactly; the directories are the primary artifacts.
 
 ---
 
