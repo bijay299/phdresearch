@@ -1991,6 +1991,172 @@ below and is Dr Rawat's call.
 
 ---
 
+## 2026-09-15 — Paired full-versus-frozen movement controls (ArcFace, fc0, seed 0)
+
+**Decided:** Full-model and frozen-backbone `random_label` were run as matched
+pairs on CIFAR-10 and faces-1000 ArcFace. On CIFAR the centred NC3 reversal
+appears only in the frozen member. faces-1000 does not support that
+conclusion: neither member reversed.
+
+### Provenance — both pairs verified paired
+
+All four runs at commit `0bf8f05`, clean tree, forget class 0, seed 0, epochs
+0-3, `split_mode=all`, no baseline retrained, no checkpoint written.
+
+| | CIFAR-10 ArcFace | faces-1000 ArcFace |
+|---|---|---|
+| baseline | `logs/postfix_seed0_clean/cifar10_arcface_seed0` | `logs/faces_arcface_seed0` (effective `s=96` via recorded argv) |
+| baseline ckpt SHA-256 | `b5d408cb6f83…` (both members) | `48c19bfd2ff8…` (both members) |
+| **training trace SHA-256** | `94dec65196210be212a2699cf6f4e2d1c1cc0f13a28434f92d5f7c6eedc1347f` | `f9c5f9fdc3c6fcfdfe88a37b708d77168c0e4271f74802e38c2b780e2f707806` |
+| observed train_eval index SHA-256 | `e3d6b519cf63…` | `1e80ea55e15b…` |
+| physical GPU | 2 (`00000000:81:00.0`) | 3 (`00000000:C1:00.0`) |
+| controls | 9 of 9 retain classes, exhaustive | 32 of 999, deterministic sample |
+| artifacts | `logs/feature_movement_paired/cifar10_arcface_seed0_random_label_{full,clfonly}_fc0` | `…/faces_arcface_seed0_random_label_{full,clfonly}_fc0` |
+
+**The trace hash matches within each pair**, so both members provably trained
+on the same retain indices, forget indices and random targets, step for step.
+That is what makes each a pair rather than two similar runs. The frozen
+members show exactly 0.000 deg displacement at every epoch.
+
+### Epoch-1 paired tables (the matched point: both members reach `output_forget`=0 at epoch 1)
+
+**CIFAR-10 ArcFace** — epoch-0 baselines: centred **+0.9692**, uncentred **-0.8781**
+
+| mode | out_f | out_r | probe_f | nc3_c | centred reversal | nc3_u | uncentred reversal | aligned forget | controls |
+|---|---|---|---|---|---|---|---|---|---|
+| full_model | 0.0000 | 0.9256 | 0.9180 | **+0.7653** | **no** | -0.9983 | no | 13.390 deg | 4.295 deg |
+| classifier_only | 0.0000 | 0.9381 | 0.9410 | **-0.9107** | **yes** | -0.9806 | no | 0.000 deg | 0.000 deg |
+
+**faces-1000 ArcFace** — epoch-0 baselines: centred **+0.8875**, uncentred **-0.8846**
+
+| mode | out_f | out_r | probe_f | nc3_c | centred reversal | nc3_u | uncentred reversal | aligned forget | controls |
+|---|---|---|---|---|---|---|---|---|---|
+| full_model | 0.0000 | 0.6724 | 0.7000 | **+0.2221** | **no** | -0.9519 | no | 9.493 deg | 4.950 deg |
+| classifier_only | 0.0000 | 0.7198 | 0.7000 | **+0.9789** | **no** | -0.9534 | no | 0.000 deg | 0.000 deg |
+
+Uncentred NC3 sign-reverses in none of the eight rows: both baselines are
+already near -0.88, exactly the case the CLAUDE.md guard covers. Every
+reversal statement here is **centred**.
+
+### Conclusion, scoped narrowly
+
+**For ArcFace, class 0, seed 0 and this isolated random-label stream on
+CIFAR-10, centred NC3 reversal occurred with a frozen backbone but not with a
+trainable backbone.** Both members reached zero output-level forgetting at
+epoch 1 with retain utility healthy (0.9381 frozen, 0.9256 full, against a
+0.9332 baseline), and their trace hashes match.
+
+**faces-1000 does not support that conclusion.** Neither member reversed
+(frozen +0.9789, full +0.2221, from a +0.8875 baseline), so freezing is not
+the operative variable there.
+
+Not generalised to other classes, seeds, methods or datasets.
+
+### Face full-model retain-utility loss
+
+The faces full-model member lost retain accuracy at the matched point:
+**0.7272 -> 0.6724, -5.5pp**, against its frozen twin's -0.7pp (0.7198). By
+epoch 3 it is 0.6396, -8.8pp. The loss is real and asymmetric within the
+pair, so the faces full-model movement numbers remain confounded by model
+degradation and are not clean forgetting-induced movement. No learning rate
+was tuned.
+
+### Exposure — two different quantities, neither of them gradient magnitude
+
+`random_label` takes one optimiser step per retain batch and cycles the forget
+loader, so the two datasets receive very different forget dosing:
+
+| quantity, per unique forget image per epoch | CIFAR-10 | faces-1000 | ratio |
+|---|---|---|---|
+| raw presentations | 44096/5000 = **8.8192** | 12120/40 = **303** | **~34.4x** |
+| avg unit-weight, mean-reduced forget-CE coefficient | 352/5000 = **0.0704** | 303/40 = **7.575** | **~107.6x** |
+
+The second divides forget-bearing optimiser steps by the number of unique
+forget images: each step contributes one mean-reduced forget CE term of unit
+weight, so replaying a small set more often does not multiply that term.
+**Neither ratio is observed gradient magnitude** -- both are counts derived
+from the loop structure; actual gradients depend on the loss surface.
+
+**Prospective dual-dose approximation (design calculation only, not run).**
+Nine full-pool face forget batches per epoch would approximately match raw
+presentations (9 against CIFAR's 8.8192) but, unweighted, would leave
+coefficient exposure at 9/40 = 0.225, about **3.20x** the CIFAR target of
+0.0704. Matching both scalar dose summaries would require a forget-loss
+weight of
+
+    lambda = (352/5000) / (9/40) = 0.3128888889
+
+This is a **prospective dual-dose approximation, not a CIFAR-equivalent
+experiment**: optimiser cadence, data geometry and actual gradients would all
+still differ. Not implemented and not run here.
+
+### What is NOT claimed
+
+- **No CE comparison and no head comparison.** This phase ran ArcFace only.
+- **No representation-erasure claim.** Displacement demonstrates movement, not
+  loss of information.
+- **No significance claim** of any kind, and no distributional assumption.
+- **No cross-dataset movement-magnitude claim.** The two exposure ratios above
+  forbid it, and they disagree with each other.
+- No claim that ArcFace is "more localised" -- no selectivity measure
+  supported that direction consistently, and the earlier wording to that
+  effect is withdrawn.
+
+### Controls are descriptive and non-exchangeable
+
+Control classes are measured the same WAY as the forget class -- dropped from
+the anchors, scored under a rotation fitted without them -- but a control
+rotation excludes **two** classes (forget + control) while the forget rotation
+excludes **one**. Measured anchor counts: CIFAR controls 20,000 vs forget
+22,500; faces controls 19,365-19,369 vs forget 19,385. The two quantities are
+therefore **not exchangeable, and the direction of that asymmetry is
+unknown** -- it must not be described as inflating control displacement, as
+making the comparison conservative, or as a quantified amount of design bias
+explained. On faces only 32 of 999 retain classes were computed, so no
+statement about all retain classes is available either.
+
+### Artifact metadata defects — recorded, not rewritten
+
+The four `logs/feature_movement_paired/` artifacts, and the four earlier
+`logs/feature_movement/` artifacts, carry two metadata defects:
+
+1. **every trajectory row records `method: "random_label_full"`**, including
+   the frozen-backbone runs, because the label was hardcoded rather than
+   taken from the mode;
+2. **`run_classification` was inferred from the dataset name**, which
+   mislabelled the faces full-model run as `new_experiment`. It is an
+   **instrumented replication** of the face pilot already recorded at commit
+   `c150b4c`.
+
+Both are fixed at commit `1f3a271` ("fix: correct movement diagnostic
+semantics"), which also splits the field into `update_mode` and an explicit,
+never-inferred `scientific_role`, and asserts row/result agreement.
+
+**The artifacts were not rewritten.** Their numerical measurements -- every
+NC3 value, displacement, output, probe and exposure count quoted above -- were
+re-read directly from the files and are valid. Read the mode from the
+directory name, not from the `method` field, for runs produced before
+`1f3a271`.
+
+### Also on record
+
+The CIFAR full-model run in this phase agrees with the earlier
+`logs/feature_movement/cifar10_arcface_seed0_random_label_full_fc0` artifact
+to four decimals on `nc3_centred_forget`, `aligned_forget` and
+`output_forget` at every epoch, on a different GPU. That is **replication
+evidence consistent with an unchanged computation**, not a proof of numerical
+identity; no bitwise comparison was performed.
+
+### Limitations
+
+- One forget class, one seed, one method, 3 epochs, ArcFace only.
+- faces `probe_forget` is 0.1-granular (10 test images per identity).
+- faces controls are a 32-of-999 sample.
+- `split_mode=all`, so nothing here speaks to held-out generalisation.
+- The faces full-model member is confounded by its retain-utility loss.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
