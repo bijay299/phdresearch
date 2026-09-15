@@ -42,8 +42,7 @@ as a function of the anchor-count-to-feature-dimension ratio:
     forget-retain  +13.4  +2.2   +0.1    +0.5    +0.03   (degrees)
 
 Production sits near 40:1 (CIFAR ~22,500 anchors / 512 dims; faces-1000
-~19,000 / 512), so the residual is small but not zero, and it points in the
-direction that would flatter the hypothesis.
+~19,000 / 512), so the residual is small but not zero.
 
 `control_class_angles` measures each control class the same WAY -- excluded
 from the anchors, then scored under a rotation fitted without it -- which
@@ -55,11 +54,14 @@ be described as one:
   * a control rotation is fitted on anchors that exclude TWO (the forget
     class AND that control class).
 
-So a control is fitted on strictly fewer anchors than the forget class is,
-which slightly worsens its fit and inflates its measured displacement. The
-comparison is therefore **approximate and descriptive**, not exchangeable.
-`per_class[c]["n_anchor"]` records each control's actual anchor count so the
-asymmetry is visible in the artifact rather than buried here.
+So a control is fitted on strictly fewer anchors than the forget class is.
+The two quantities are therefore **not exchangeable**, and the comparison is
+descriptive only. The DIRECTION of that asymmetry is NOT established here:
+nothing in this module demonstrates whether excluding a second class inflates
+or deflates a control's measured displacement, and it must not be described as
+inflating it, as making the comparison conservative, or as a quantified amount
+of "design bias explained". `per_class[c]["n_anchor"]` records each control's
+actual anchor count so the asymmetry is visible in the artifact.
 
 Consequences for what may be said: these controls support statements of the
 form "the forget class's displacement is larger than that of the retain
@@ -467,10 +469,11 @@ def control_class_angles(base_unit: np.ndarray, later_unit: np.ndarray,
 
     APPROXIMATE, NOT EXCHANGEABLE. A control rotation excludes two classes
     (the forget class and the control class); the forget rotation excludes
-    one. Controls are therefore fitted on fewer anchors and their displacement
-    is inflated relative to the forget class's. `n_anchor` is returned per
-    control so the asymmetry is auditable. Use these descriptively; they
-    support no significance claim.
+    one, so controls are fitted on fewer anchors. Whether that raises or
+    lowers a control's measured displacement is NOT established -- do not
+    describe it as inflating them or as making the comparison conservative.
+    `n_anchor` is returned per control so the asymmetry is auditable. Use
+    these descriptively; they support no significance claim.
     """
     labels = np.asarray(labels)
     out: Dict[int, Dict] = {}
@@ -593,11 +596,11 @@ def movement_report(base_feats: np.ndarray, later_feats: np.ndarray,
         "control_min_deg": (float(null_means.min())
                                  if null_means.size else float("nan")),
         "control_n": int(null_means.size),
-        # The headline contrast: forget-class displacement against retain
-        # classes measured the same way but never unlearned. Positive means
-        # the forget class moved more than the design's own bias explains --
-        # descriptively, and conservatively, since controls are fitted on
-        # fewer anchors (see the module docstring).
+        # Descriptive contrast: forget-class displacement against retain
+        # classes measured the same way but never unlearned. The two are not
+        # exchangeable (controls exclude two classes, forget excludes one) and
+        # the direction of that asymmetry is unknown, so this is not a
+        # quantity of "bias explained" and carries no significance.
         "aligned_forget_minus_control_mean": (
             float(ali_f["mean"] - null_means.mean())
             if null_means.size else float("nan")),

@@ -37,11 +37,13 @@ WHAT THIS IS NOT
 ----------------
 Not a replay. `random_label` here is reseeded immediately before it runs, and
 historical CIFAR `random_label` rows were produced mid-sequence inside
-`run_experiment.py` with the RNG carrying state from preceding conditions. The
-CIFAR cells are INSTRUMENTED REPLICATIONS of that condition, not bitwise
-reproductions of those rows, and are labelled as such wherever they are
-reported. `scripts/nc3_mean_robustness.py` is the script in this repo that
-does exact replay; this one deliberately does not.
+`run_experiment.py` with the RNG carrying state from preceding conditions.
+Runs from this script are REPLICATIONS, not bitwise reproductions. Where a
+re-run agrees with an earlier artifact to four decimals, that is REPLICATION
+EVIDENCE -- consistent with an unchanged computation -- and not a proof of
+numerical identity, which would need a bitwise comparison this script does not
+perform. `scripts/nc3_mean_robustness.py` is the script in this repo that does
+exact replay; this one deliberately does not.
 
 MODES
 -----
@@ -51,13 +53,24 @@ sample stream. A pair is only a pair if both members report the SAME
 `training_trace_sha256`; the driver records it so that can be checked rather
 than assumed.
 
-EXPOSURE -- state it before comparing movement across datasets
---------------------------------------------------------------
+EXPOSURE -- two different quantities, neither of them gradient magnitude
+------------------------------------------------------------------------
 `random_label` runs one step per retain batch and cycles the forget loader, so
-a small forget set is replayed far more often. Measured: 8.82 presentations
-per unique forget image per epoch on CIFAR-10 against 303.00 on faces-1000, a
-34.4x difference. `result.json` records predicted and observed counts and
-fails the run if they disagree.
+a small forget set is replayed far more often. Two summaries are recorded and
+they do NOT agree:
+
+  raw presentations per unique forget image per epoch
+      CIFAR 44096/5000 = 8.8192      faces 12120/40 = 303        ~34.4x
+  average unit-weight forget-CE coefficient per unique forget image per epoch
+      CIFAR 352/5000 = 0.0704        faces 303/40 = 7.575        ~107.6x
+
+The second divides forget-bearing optimiser steps by the number of unique
+forget images: each step contributes one mean-reduced forget CE term of unit
+weight, so replaying a small set more often does not multiply that term.
+NEITHER ratio is an observed gradient magnitude -- both are counts derived
+from the loop structure, and actual gradients depend on the loss surface.
+`result.json` records predicted and observed counts and fails the run if they
+disagree.
 
 No checkpoint is written. The point is the trajectory, and a 3-epoch unlearned
 model is reconstructible from the baseline plus this config.
@@ -102,27 +115,52 @@ UNLEARN_METHOD = "random_label"
 SPLIT_MODE = "all"
 
 
-def classify_run(data_name: str, classifier_only: bool) -> str:
-    """What kind of run this is, for the artifact's own record.
+SCIENTIFIC_ROLES = ("new_experiment", "instrumented_replication",
+                    "paired_control")
 
-    The field used to be a hardcoded `instrumented_replication: true`, which
-    was wrong for three of the four cells it was written into. The honest
-    taxonomy:
 
-      paired_control           any frozen-backbone cell here -- these exist to
-                               be compared against their full-model twin
-      instrumented_replication CIFAR full-model: historical random_label rows
-                               exist for this condition, so this re-measures a
-                               condition already on record (not a bitwise
-                               replay -- the reseed makes it a replication)
-      new_experiment           faces full-model: no full-model unlearning
-                               condition has ever been run on either face set
+def resolve_scientific_role(requested: Optional[str],
+                            classifier_only: bool) -> str:
+    """Validate the run's scientific role. It is NEVER inferred.
+
+    An earlier version guessed the role from the dataset name -- CIFAR meant
+    replication, anything else meant new experiment. That is not a property of
+    the dataset. It mislabelled the faces full-model run as `new_experiment`
+    when it replicates the face pilot already recorded at commit c150b4c.
+    Whether a run is new, a replication, or a control is a claim about the
+    experimental record, and only the person launching it knows.
+
+    Classifier-only runs exist solely to be compared against a full-model twin,
+    so their role is fixed at `paired_control`. Full-model runs must state a
+    role explicitly; there is no default, because the wrong default is exactly
+    how the faces run was mislabelled.
     """
     if classifier_only:
+        if requested not in (None, "paired_control"):
+            raise ValueError(
+                f"a classifier-only run is a paired_control by construction; "
+                f"got --scientific-role {requested!r}"
+            )
         return "paired_control"
-    if str(data_name).lower().startswith("cifar"):
-        return "instrumented_replication"
-    return "new_experiment"
+    if requested is None:
+        raise ValueError(
+            "--scientific-role is required for a full-model run. Choose "
+            "new_experiment (no comparable condition exists on this dataset) "
+            "or instrumented_replication (this condition is already on record "
+            "and is being re-measured with instrumentation). It is not "
+            "inferable from the dataset name."
+        )
+    if requested == "paired_control":
+        raise ValueError(
+            "paired_control is reserved for classifier-only runs; a "
+            "full-model run is the thing a control is compared against"
+        )
+    if requested not in SCIENTIFIC_ROLES:
+        raise ValueError(
+            f"unknown --scientific-role {requested!r}; "
+            f"expected one of {SCIENTIFIC_ROLES}"
+        )
+    return requested
 
 
 def exposure_accounting(n_retain: int, n_forget: int, batch_size: int,
@@ -155,6 +193,17 @@ def exposure_accounting(n_retain: int, n_forget: int, batch_size: int,
         "forget_presentations_per_epoch": int(forget_pres),
         "presentations_per_unique_retain_image": n_retain / max(n_retain, 1),
         "presentations_per_unique_forget_image": forget_pres / max(n_forget, 1),
+        # Raw presentations and loss WEIGHTING are different quantities.
+        # Every step contributes one mean-reduced forget CE term of unit
+        # weight, so that term's total coefficient per epoch is `steps`,
+        # spread over n_forget unique images regardless of how many times each
+        # appeared. A tiny forget set is replayed more often but each
+        # appearance carries a proportionally smaller share of its batch mean.
+        # NEITHER of these is an observed gradient magnitude; both are counts
+        # derived from the loop structure.
+        "forget_bearing_optimiser_steps": int(steps),
+        "avg_unit_weight_forget_ce_coefficient_per_unique_forget_image":
+            steps / max(n_forget, 1),
         "total_optimiser_steps": int(steps * epochs),
         "total_forget_presentations": int(forget_pres * epochs),
     }
@@ -279,7 +328,9 @@ def main(a: argparse.Namespace) -> None:
 
     classifier_only = bool(a.classifier_only)
     mode_tag = "clfonly" if classifier_only else "full"
-    run_class = classify_run(cfg["data"]["name"], classifier_only)
+    update_mode = "classifier_only" if classifier_only else "full_model"
+    method_label = f"{UNLEARN_METHOD}_{mode_tag}"
+    scientific_role = resolve_scientific_role(a.scientific_role, classifier_only)
     name = a.name or (
         f"{cfg['data']['name']}_{cfg['head']['name']}_seed{seed}"
         f"_random_label_{mode_tag}_fc{fc}"
@@ -288,7 +339,8 @@ def main(a: argparse.Namespace) -> None:
     # rather than merely unlikely.
     rd = RunDir.create(a.out_dir, name, dict(
         cfg, _feature_movement=True, _method=UNLEARN_METHOD,
-        _classifier_only=classifier_only, _run_classification=run_class,
+        _classifier_only=classifier_only, _update_mode=update_mode,
+        _scientific_role=scientific_role,
         _forget_class=fc, _epochs=epochs,
         _anchor_fraction=a.anchor_fraction, _anchor_seed=a.anchor_seed,
         _n_controls=a.n_controls, _baseline_run_dir=str(run_dir),
@@ -299,7 +351,8 @@ def main(a: argparse.Namespace) -> None:
     rd.log(f"  device        {device_string()} / {device}")
     rd.log(f"  commit        {commit}")
     rd.log(f"  mode          {'classifier-only (backbone FROZEN)' if classifier_only else 'full model'}")
-    rd.log(f"  run class     {run_class}")
+    rd.log(f"  update mode   {update_mode}")
+    rd.log(f"  science role  {scientific_role}")
 
     # ---- data ----------------------------------------------------------
     train_ds, train_eval_ds, test_ds, num_classes = D.build_datasets(
@@ -410,7 +463,7 @@ def main(a: argparse.Namespace) -> None:
         c_now = nc3_c.get("forget", float("nan"))
 
         row = {
-            "head": head_name, "method": f"{UNLEARN_METHOD}_full",
+            "head": head_name, "method": method_label,
             "forget_class": fc, "seed": seed, "epoch": epoch,
             "output_forget": out_acc.get("forget", float("nan")),
             "output_retain": out_acc.get("retain", float("nan")),
@@ -494,6 +547,16 @@ def main(a: argparse.Namespace) -> None:
 
     rows = [json.loads(line)
             for line in rd.path("trajectory.jsonl").read_text().splitlines()]
+    # Every row must describe THIS run. The `method` field was once hardcoded
+    # to the full-model label, so frozen-backbone runs wrote rows claiming to
+    # be full-model runs -- a metadata defect that survived into four
+    # published artifacts. Assert it here rather than trust it.
+    bad = [r["epoch"] for r in rows if r.get("method") != method_label]
+    if bad:
+        raise ValueError(
+            f"trajectory rows at epochs {bad} carry a method label that "
+            f"disagrees with this run ({method_label!r})"
+        )
     first_zero = next((r["epoch"] for r in rows
                        if r["epoch"] > 0 and r["output_forget"] == 0.0), None)
 
@@ -521,9 +584,17 @@ def main(a: argparse.Namespace) -> None:
 
     rd.write_json("result.json", {
         "name": name,
-        "method": f"{UNLEARN_METHOD}_{mode_tag}",
+        "method": method_label,
         "classifier_only": classifier_only,
-        "run_classification": run_class,
+        # Two ORTHOGONAL fields. `update_mode` is a mechanical fact about what
+        # the optimiser touched. `scientific_role` is a claim about how this
+        # run relates to the record, which no code can infer -- it is supplied
+        # by the person launching the run. The previous version guessed the
+        # role from the dataset NAME, which mislabelled the faces full-model
+        # run as a new experiment when it in fact replicates the c150b4c face
+        # pilot.
+        "update_mode": update_mode,
+        "scientific_role": scientific_role,
         "training_trace_sha256": trace_state["h"].hexdigest(),
         "exposure_predicted": exposure,
         "exposure_observed": measured_exposure,
@@ -535,12 +606,15 @@ def main(a: argparse.Namespace) -> None:
                           "deterministic sample -- descriptive, not exhaustive"),
             "control_class_identities": [int(c) for c in control_classes],
             "interpretation": (
-                "APPROXIMATE leave-one-class-out controls. A control rotation "
-                "excludes two classes (forget + control); the forget rotation "
-                "excludes one. Controls are fitted on fewer anchors, so their "
-                "displacement is inflated relative to the forget class's. "
-                "Descriptive only: no significance claim, and no claim that "
-                "the forget class exceeded ALL retain classes."),
+                "APPROXIMATE leave-one-class-out controls, NOT exchangeable "
+                "with the forget measurement: a control rotation excludes two "
+                "classes (forget + control) while the forget rotation excludes "
+                "one, so controls are fitted on fewer anchors. The DIRECTION "
+                "of that asymmetry is not established -- it must not be "
+                "described as inflating control displacement or as making the "
+                "comparison conservative. Descriptive only: no significance "
+                "claim, and no claim that the forget class exceeded ALL "
+                "retain classes."),
         },
         "forget_class": fc,
         "seed": seed,
@@ -602,6 +676,11 @@ if __name__ == "__main__":
                     help="governs the anchor/eval split and null-control "
                          "selection only; the experiment seed comes from the "
                          "baseline config and is not touched here")
+    ap.add_argument("--scientific-role", default=None,
+                    choices=list(SCIENTIFIC_ROLES),
+                    help="required for full-model runs: new_experiment or "
+                         "instrumented_replication. Never inferred. "
+                         "Classifier-only runs are always paired_control.")
     ap.add_argument("--classifier-only", action="store_true",
                     help="freeze the backbone (paired control). Absent, the "
                          "full-model path is taken exactly as before.")

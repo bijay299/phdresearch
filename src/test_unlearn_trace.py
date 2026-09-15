@@ -300,7 +300,20 @@ def test_exposure_arithmetic_known_values():
           abs(f["presentations_per_unique_forget_image"] - 303.0) < 1e-9)
     ratio = (f["presentations_per_unique_forget_image"]
              / c["presentations_per_unique_forget_image"])
-    check("faces:CIFAR exposure ratio ~34.4x", abs(ratio - 34.36) < 0.1)
+    check("faces:CIFAR raw-presentation ratio ~34.4x", abs(ratio - 34.36) < 0.1)
+
+    # The SECOND, different quantity: loss weighting, not raw presentations.
+    K = "avg_unit_weight_forget_ce_coefficient_per_unique_forget_image"
+    check("CIFAR coefficient 352/5000 = 0.0704", abs(c[K] - 0.0704) < 1e-9)
+    check("faces coefficient 303/40 = 7.575", abs(f[K] - 7.575) < 1e-9)
+    check("CIFAR forget-bearing steps == retain batches",
+          c["forget_bearing_optimiser_steps"] == 352)
+    check("faces forget-bearing steps == retain batches",
+          f["forget_bearing_optimiser_steps"] == 303)
+    cratio = f[K] / c[K]
+    check("coefficient ratio ~107.6x", abs(cratio - 107.60) < 0.1)
+    check("the two ratios genuinely disagree (34.4 vs 107.6)",
+          abs(cratio - ratio) > 70.0)
 
     e = exposure_accounting(1024, 128, 128, 1)   # both divide exactly
     check("exact division: 8 steps", e["retain_batches_per_epoch"] == 8)
@@ -332,21 +345,31 @@ def test_mode_selection():
           not torch.equal(hd_c.weight.detach(), hd0.weight.detach()))
 
 
-def test_run_classification():
-    print("run classification: accurate per dataset and mode")
-    from feature_movement import classify_run
-    check("cifar10 full -> instrumented_replication",
-          classify_run("cifar10", False) == "instrumented_replication")
-    check("cifar10 clfonly -> paired_control",
-          classify_run("cifar10", True) == "paired_control")
-    check("faces full -> new_experiment",
-          classify_run("faces", False) == "new_experiment")
-    check("faces clfonly -> paired_control",
-          classify_run("faces", True) == "paired_control")
-    check("cifar100 full -> instrumented_replication",
-          classify_run("cifar100", False) == "instrumented_replication")
-    check("never the old unconditional literal",
-          classify_run("faces", False) != "instrumented_replication")
+def test_scientific_role_is_explicit():
+    print("scientific role: explicit, validated, never inferred")
+    import feature_movement as FM
+    from feature_movement import resolve_scientific_role as R
+    check("classifier-only is always paired_control",
+          R(None, True) == "paired_control")
+    check("classifier-only accepts a redundant explicit paired_control",
+          R("paired_control", True) == "paired_control")
+    raises("classifier-only rejects any other role",
+           lambda: R("new_experiment", True), "by construction")
+    check("full-model new_experiment accepted",
+          R("new_experiment", False) == "new_experiment")
+    check("full-model instrumented_replication accepted",
+          R("instrumented_replication", False) == "instrumented_replication")
+    raises("full-model REQUIRES an explicit role",
+           lambda: R(None, False), "required for a full-model run")
+    raises("full-model may not claim paired_control",
+           lambda: R("paired_control", False), "reserved for classifier-only")
+    raises("unknown role rejected",
+           lambda: R("pilot", False), "unknown")
+    check("dataset-name inference is gone",
+          not hasattr(FM, "classify_run"))
+    check("the role vocabulary is exactly three",
+          FM.SCIENTIFIC_ROLES == ("new_experiment", "instrumented_replication",
+                                  "paired_control"))
 
 
 # ----------------------------------------------------------------------
@@ -415,7 +438,7 @@ def main():
         test_exposure_accounting_matches_reality,
         test_exposure_arithmetic_known_values,
         test_mode_selection,
-        test_run_classification,
+        test_scientific_role_is_explicit,
         test_indexed_dataset,
         test_extract_with_indices,
         test_observed_index_mismatch_detection,

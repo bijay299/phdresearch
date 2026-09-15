@@ -112,16 +112,19 @@ def make_baseline(tmp: Path) -> Path:
     return run
 
 
-def args(run_dir, out_dir, classifier_only, n_controls=4, epochs=2):
+def args(run_dir, out_dir, classifier_only, n_controls=4, epochs=2,
+         scientific_role="new_experiment"):
     return types.SimpleNamespace(
         run_dir=str(run_dir), ckpt=None, forget_class=0, epochs=epochs,
         out_dir=str(out_dir), name=None, anchor_fraction=0.5, anchor_seed=0,
         classifier_only=classifier_only, n_controls=n_controls,
+        scientific_role=None if classifier_only else scientific_role,
         device="cpu", allow_dirty=True, set=[],
     )
 
 
-def run_driver(run_dir, out_dir, classifier_only):
+def run_driver(run_dir, out_dir, classifier_only,
+               scientific_role="new_experiment"):
     """Run the real main() with the tiny model/dataset injected."""
     import backbones as BK
     import heads as H
@@ -131,7 +134,8 @@ def run_driver(run_dir, out_dir, classifier_only):
         FM.D.build_datasets = fake_build_datasets
         FM.build_backbone = lambda **kw: TinyBackbone(**kw)
         FM.build_head = lambda name, **kw: TinyHead(**kw)
-        FM.main(args(run_dir, out_dir, classifier_only))
+        FM.main(args(run_dir, out_dir, classifier_only,
+                     scientific_role=scientific_role))
     finally:
         (D.build_datasets, BK.build_backbone, H.build_head,
          FM.D.build_datasets, FM.build_backbone, FM.build_head) = orig
@@ -189,6 +193,30 @@ def test_driver_runs_both_modes():
             check(f"{mode}: no NaN in the trajectory",
                   not [k for r in rows for k, v in r.items()
                        if isinstance(v, float) and v != v])
+            # The defect that reached four published artifacts: every row
+            # carried the full-model method label regardless of mode.
+            expected_method = f"random_label_{mode}"
+            check(f"{mode}: every row's method == {expected_method}",
+                  all(r["method"] == expected_method for r in rows))
+            check(f"{mode}: rows agree with the top-level result",
+                  all(r["method"] == res["method"] for r in rows))
+            check(f"{mode}: update_mode recorded orthogonally",
+                  res["update_mode"] ==
+                  ("classifier_only" if mode == "clfonly" else "full_model"))
+            check(f"{mode}: scientific_role recorded",
+                  res["scientific_role"] in FM.SCIENTIFIC_ROLES)
+            check(f"{mode}: no inferred run_classification field",
+                  "run_classification" not in res)
+            interp = res["controls"]["interpretation"].lower()
+            check(f"{mode}: control text claims no direction",
+                  "not established" in interp
+                  and "inflating" not in interp.replace(
+                      "described as inflating", ""))
+            check(f"{mode}: exposure records BOTH dose summaries",
+                  "presentations_per_unique_forget_image"
+                  in res["exposure_predicted"]
+                  and "avg_unit_weight_forget_ce_coefficient_per_unique"
+                      "_forget_image" in res["exposure_predicted"])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -210,16 +238,40 @@ def test_driver_pairs_share_a_trace():
               == clf["splits"]["train_eval_observed_index_sha256"])
         check("exposure identical",
               full["exposure_observed"] == clf["exposure_observed"])
-        check("run classifications differ",
-              full["run_classification"] != clf["run_classification"])
+        check("update modes differ",
+              full["update_mode"] != clf["update_mode"])
         check("clfonly is the paired control",
-              clf["run_classification"] == "paired_control")
+              clf["scientific_role"] == "paired_control")
+        check("full-model role is the one that was requested",
+              full["scientific_role"] == "new_experiment")
+        check("method labels differ between the pair",
+              full["method"] != clf["method"])
+        check("clfonly method label is correct",
+              clf["method"] == "random_label_clfonly")
         check("frozen backbone really froze: zero RAW feature movement",
               all(r["raw_forget"]["mean"] == 0.0 for r in crows))
         check("frozen backbone: aligned movement ~ 0 too",
               all(r["aligned_forget"]["mean"] < 1e-6 for r in crows))
         check("full model really moved features",
               frows[-1]["raw_forget"]["mean"] > 0.0)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_driver_requires_explicit_role():
+    print("driver end-to-end: a full-model run without a role is refused")
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        base = make_baseline(tmp)
+        out = tmp / "paired"
+        try:
+            run_driver(base, out, classifier_only=False, scientific_role=None)
+        except ValueError as e:
+            check("raised ValueError naming the flag",
+                  "scientific-role" in str(e))
+        else:
+            raise AssertionError("expected a ValueError")
+        check("nothing was written", not out.exists() or not any(out.iterdir()))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -244,6 +296,7 @@ def test_driver_refuses_nonempty_output():
 def main():
     tests = [test_driver_runs_both_modes,
              test_driver_pairs_share_a_trace,
+             test_driver_requires_explicit_role,
              test_driver_refuses_nonempty_output]
     for t in tests:
         t()
