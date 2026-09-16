@@ -1,0 +1,16 @@
+# CONTROLLED NESTED CLASS-COUNT STUDY -- K=500, ArcFace head.
+#
+# See configs/facesK500_ce.yaml for why this is not the historical faces-100
+# dataset. s stays at 96.0 and m at 0.5 -- the values tuned for the
+# 1000-identity set (notes/decisions.md, 2026-09-14) -- deliberately NOT
+# retuned per K, so class count is the only variable. If a K comes out
+# accuracy-mismatched against its CE partner beyond the 2pp baseline gate,
+# that K stops before unlearning and is reported; it is not tuned away on one
+# head only.
+
+inherits: faces_arcface.yaml
+
+out_dir: logs_classcount/K500
+
+data:
+  max_identities: 500

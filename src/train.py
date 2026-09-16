@@ -146,7 +146,7 @@ def output_accuracy(labels: np.ndarray, preds: np.ndarray,
 def evaluate_light(backbone: nn.Module, head: nn.Module,
                    train_eval_loader: DataLoader, test_loader: DataLoader,
                    num_classes: int, device: str, forget_class: int,
-                   seed: int = 0) -> Dict:
+                   seed: int = 0, include_uncentred: bool = False) -> Dict:
     """
     A cheap subset of `evaluate()`, for tracking one point on an unlearning
     TRAJECTORY (measured every epoch) rather than only the end-of-run row.
@@ -167,6 +167,15 @@ def evaluate_light(backbone: nn.Module, head: nn.Module,
     nc3 here is CENTRED, excluding the forget class from the centring
     reference -- same convention as `evaluate`, not the uncentred one
     `--compare` prints (see notes/decisions.md, centring contamination).
+
+    `include_uncentred` additionally returns `nc3_uncentred_forget`, the
+    convention the AISTATS prediction is actually stated in. It is OFF by
+    default so every existing caller keeps the exact dict it had; the cost
+    when on is one extra cosine over features that were already extracted,
+    not a second probe fit, so the "too expensive per epoch" reasoning above
+    does not apply to it. Callers that report a trajectory table must set it:
+    CLAUDE.md requires both conventions to be reported, with the convention
+    stated, and neither dropped to simplify a table.
     """
     f_tr, y_tr, p_tr = extract(backbone, head, train_eval_loader, device)
     f_te, y_te, p_te = extract(backbone, head, test_loader, device)
@@ -177,13 +186,19 @@ def evaluate_light(backbone: nn.Module, head: nn.Module,
     nc3_c = M.nc3_alignment(f_tr, y_tr, W, num_classes, centre=True,
                             exclude_from_centre=forget_class)
 
-    return {
+    point = {
         "output_forget": out_acc.get("forget", float("nan")),
         "output_retain": out_acc.get("retain", float("nan")),
         "probe_forget": probe.get("forget", float("nan")),
         "nc3_centred_forget": nc3_c.get("forget", float("nan")),
         "nc1_angular": M.nc1_angular(f_tr, y_tr, num_classes),
     }
+    if include_uncentred:
+        # centre=False, so exclude_from_centre is meaningless here and is not
+        # passed: there is no global mean being subtracted to contaminate.
+        nc3_u = M.nc3_alignment(f_tr, y_tr, W, num_classes, centre=False)
+        point["nc3_uncentred_forget"] = nc3_u.get("forget", float("nan"))
+    return point
 
 
 def evaluate(backbone: nn.Module, head: nn.Module,

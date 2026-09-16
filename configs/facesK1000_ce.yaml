@@ -1,0 +1,24 @@
+# CONTROLLED NESTED CLASS-COUNT STUDY -- K=1000, CE head.
+#
+# NOT the historical 100-identity dataset in configs/faces100_*.yaml. That one
+# points at a SEPARATE extracted directory (casia-webface-folders-100id) with
+# min_images=100 and an unrecorded extraction seed, so it changes the source
+# directory, the eligibility filter and the images-per-identity all at once.
+#
+# This config instead takes the FIRST 1000 eligible identities of the SAME
+# faces-1000 source directory, with the SAME min_images=40 and
+# max_images_per_identity=50 inherited from faces_ce.yaml. Identity sets are
+# therefore nested across K, a shared identity keeps its class index, and at
+# seed 0 the selected images and the train/test split of a shared identity are
+# identical at every K (verified before the sweep, 2026-09-15).
+#
+# ONLY max_identities and out_dir move. Backbone, schedule, epochs, lr,
+# augmentation, batch size and head settings are inherited unchanged, so class
+# count is the single variable against the other K.
+
+inherits: faces_ce.yaml
+
+out_dir: logs_classcount/K1000
+
+data:
+  max_identities: 1000
