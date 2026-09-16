@@ -2541,6 +2541,264 @@ follow-up ablations proposed in the dual-dose entry above.
 
 ---
 
+## 2026-09-16 — controlled nested class-count sweep, K=100/250/500/1000
+
+**Decided:** Record the nested class-count sweep as 24 valid unlearning cells
+at K=100, 250 and 1000, plus four baselines at each of the four K. **K=500 is
+excluded from the unlearning comparison by the pre-registered head-fairness
+gate** and neither head was retuned to rescue it.
+
+**Because:** the 100-identity result (2026-09-14) came from one class count.
+If the CE-versus-ArcFace difference is a property of the loss it should not
+depend on how many classes the head has; if it does depend on K, a single-K
+claim is not safe to write. This sweep varies **only** `max_identities` and
+`out_dir`: identity sets are nested, a shared identity keeps its class index,
+and at seed 0 the selected images and the train/test split of a shared
+identity are identical at every K.
+
+### What ran
+
+One variable moves per comparison. Every cell: `random_label`,
+classifier-only (backbone frozen), `m=9` active forget steps per epoch,
+`lambda=1`, 3 unlearning epochs, seed 0, per-cell reseeding,
+`split_mode=all`, `n_forget=40`, forget classes {0, 29, 60, 95} =
+identities {00001, 00142, 00284, 00524} — the same four people at every K,
+confirmed from each cell's own identity manifest.
+
+Wave 1 (K=100, K=1000) was completed by adding the four missing
+K=1000 × ArcFace cells; Wave 2 added K=250 and K=500 baselines and, after the
+gate, the eight K=250 cells.
+
+### Baselines and the head-fairness gate
+
+| K | CE test acc | ArcFace test acc | gap (pp) | gate (2.00pp) |
+|---|---|---|---|---|
+| 100 | 57.65 | 57.45 | 0.20 | pass |
+| 250 | 67.47 | 68.58 | 1.10 | pass |
+| 500 | 68.97 | 71.32 | **2.36** | **fail** |
+| 1000 | 74.65 | 72.71 | 1.94 | pass |
+
+All eight baselines: 40/40 epochs, final `lr 0.00000`, seed 0, valid
+checkpoint. **K=500 failed because ArcFace exceeded CE by 2.36pp**, not
+because ArcFace underperformed; the gate is symmetric and pre-registered, so
+it fails either way and its unlearning cells were never run. Its baselines are
+retained as artifacts.
+
+### Validation — 24/24 cells
+
+Recomputed from the artifacts, not from any prior summary: commit `51c38be`
+with `git_dirty=False`; baseline checkpoint sha256 re-hashed from disk and
+matched; identity/image/train/test manifests constant within each K;
+`update_mode=classifier_only`; `per_cell_seed=True`; `m=9`, `lambda=1`;
+predicted dose equals observed dose (27 active forget-bearing steps, 1080
+active presentations, weighted mass 27, re-derived independently of the file);
+exactly four trajectory rows at epochs 0-3; centred **and** uncentred NC3
+finite in every row; `n_forget=40`. **No canonical value was read from a
+`unlearn_pass1_nan_uncentred` directory** — those are preserved untouched as
+non-authoritative diagnostic history of the nan defect fixed in `51c38be`.
+
+### First epoch with `output_forget = 0`
+
+| K | fc | CE | ArcFace | first common |
+|---|---|---|---|---|
+| 100 | 0 | 1 | 2 | 2 |
+| 100 | 29 | 2 | 3 | 3 |
+| 100 | 60 | 1 | 1 | 1 |
+| 100 | 95 | 1 | never | **none** |
+| 250 | 0 | 1 | 2 | 2 |
+| 250 | 29 | 1 | 2 | 2 |
+| 250 | 60 | 1 | 3 | 3 |
+| 250 | 95 | 1 | 2 | 2 |
+| 1000 | 0 | 1 | 1 | 1 |
+| 1000 | 29 | 1 | 1 | 1 |
+| 1000 | 60 | 1 | 2 | 2 |
+| 1000 | 95 | 2 | 1 | 2 |
+
+CE reaches zero at epoch 1 in 11 of 12 cells. ArcFace is slower in 7 of 12 and
+faster in 1 (K=1000 fc95). **Eleven of twelve pairs have a matched epoch.**
+K=100 fc95 has none — ArcFace never reaches 0 inside the 3-epoch budget — and
+is recorded as **"no matched-outcome comparison"**; the budget was not extended
+and no other epoch was substituted.
+
+### Matched-outcome geometry — raw endpoint levels
+
+| K | fc | ep | head | out_f | out_r | probe_f | nc3 centred | nc3 uncentred |
+|---|---|---|---|---|---|---|---|---|
+| 100 | 0 | 2 | ce | 0.0000 | 0.5711 | 0.7000 | +0.7478 | +0.1706 |
+| 100 | 0 | 2 | arcface | 0.0000 | 0.5711 | 0.6000 | +0.9785 | -0.9228 |
+| 100 | 29 | 3 | ce | 0.0000 | 0.5629 | 0.8000 | +0.7296 | +0.1739 |
+| 100 | 29 | 3 | arcface | 0.0000 | 0.5711 | 0.8000 | +0.9430 | -0.9320 |
+| 100 | 60 | 1 | ce | 0.0000 | 0.5742 | 0.3000 | +0.7566 | +0.2535 |
+| 100 | 60 | 1 | arcface | 0.0000 | 0.5711 | 0.6000 | +0.6713 | -0.9232 |
+| 250 | 0 | 2 | ce | 0.0000 | 0.6742 | 0.7000 | +0.6893 | +0.2969 |
+| 250 | 0 | 2 | arcface | 0.0000 | 0.6828 | 0.8000 | +0.9680 | -0.9265 |
+| 250 | 29 | 2 | ce | 0.0000 | 0.6726 | 0.9000 | +0.7421 | +0.3432 |
+| 250 | 29 | 2 | arcface | 0.0000 | 0.6882 | 0.9000 | +0.9845 | -0.9285 |
+| 250 | 60 | 3 | ce | 0.0000 | 0.6684 | 0.5000 | +0.6858 | +0.2699 |
+| 250 | 60 | 3 | arcface | 0.0000 | 0.6873 | 0.5000 | +0.9792 | -0.9326 |
+| 250 | 95 | 2 | ce | 0.0000 | 0.6746 | 0.7000 | +0.6725 | +0.2835 |
+| 250 | 95 | 2 | arcface | 0.0000 | 0.6865 | 0.9000 | +0.8333 | -0.9303 |
+| 1000 | 0 | 1 | ce | 0.0000 | 0.7477 | 0.7000 | +0.6605 | +0.3300 |
+| 1000 | 0 | 1 | arcface | 0.0000 | 0.7244 | 0.7000 | +0.9280 | -0.9173 |
+| 1000 | 29 | 1 | ce | 0.0000 | 0.7461 | 0.9000 | +0.6774 | +0.3303 |
+| 1000 | 29 | 1 | arcface | 0.0000 | 0.7260 | 0.8000 | +0.8856 | -0.9183 |
+| 1000 | 60 | 2 | ce | 0.0000 | 0.7452 | 0.5000 | +0.6297 | +0.2758 |
+| 1000 | 60 | 2 | arcface | 0.0000 | 0.7244 | 0.7000 | +0.9927 | -0.9255 |
+| 1000 | 95 | 2 | ce | 0.0000 | 0.7471 | 1.0000 | +0.5316 | +0.2591 |
+| 1000 | 95 | 2 | arcface | 0.0000 | 0.7236 | 1.0000 | +0.9887 | -0.9258 |
+
+**These raw levels must not be read as an unlearning-induced head effect.**
+The two heads start at different geometry — centred NC3 near +0.70 to +0.99
+for ArcFace against +0.70 to +0.87 for CE, and uncentred on **opposite sides
+of zero** (CE about +0.56 to +0.63, ArcFace about -0.88). The level difference
+at the matched epoch is mostly the starting difference.
+
+### Matched-outcome within-head change and difference-in-changes
+
+`d` is the matched-epoch value minus **that head's own epoch-0 value**.
+`dArcFace - dCE` is **our arithmetic**, not a metric from the AISTATS paper.
+
+| K | fc | ep | dCE (centred) | dArcFace (centred) | dArcFace - dCE | dCE (uncentred) | dArcFace (uncentred) |
+|---|---|---|---|---|---|---|---|
+| 100 | 0 | 2 | -0.1223 | -0.0006 | +0.1217 | -0.3475 | -0.0277 |
+| 100 | 29 | 3 | -0.1320 | +0.0062 | +0.1382 | -0.3637 | -0.0428 |
+| 100 | 60 | 1 | -0.0855 | -0.0670 | +0.0185 | -0.2755 | -0.0265 |
+| 250 | 0 | 2 | -0.1382 | +0.0153 | +0.1535 | -0.2903 | -0.0410 |
+| 250 | 29 | 2 | -0.1139 | -0.0011 | +0.1128 | -0.2848 | -0.0433 |
+| 250 | 60 | 3 | -0.1374 | +0.0058 | +0.1432 | -0.3126 | -0.0422 |
+| 250 | 95 | 2 | -0.1287 | -0.0053 | +0.1234 | -0.3141 | -0.0415 |
+| 1000 | 0 | 1 | -0.1282 | +0.0405 | +0.1687 | -0.2607 | -0.0328 |
+| 1000 | 29 | 1 | -0.1507 | -0.0407 | +0.1100 | -0.2803 | -0.0364 |
+| 1000 | 60 | 2 | -0.1514 | +0.0055 | +0.1568 | -0.3057 | -0.0408 |
+| 1000 | 95 | 2 | -0.1690 | -0.0006 | +0.1685 | -0.3050 | -0.0405 |
+
+`dArcFace - dCE` for centred NC3 is **positive in all eleven matched cells**.
+CE's classifier-to-class-mean cosine falls by 0.086 to 0.169 while ArcFace's
+moves by -0.067 to +0.041.
+
+### Fixed-epoch difference-in-changes — controls for the varying matched epoch
+
+The matched epoch differs by cell (1, 2 or 3), and `dCE` grows with epoch, so
+the matched-outcome column above mixes two things. At a **fixed** epoch, with
+all four classes at every K:
+
+| convention | ep | K=100 | K=250 | K=1000 |
+|---|---|---|---|---|
+| centred, mean dCE | 1 | -0.0948 | -0.1053 | -0.1378 |
+| centred, mean dArcFace | 1 | -0.0374 | +0.0041 | +0.0015 |
+| centred, mean (dArc - dCE) | 1 | **+0.0574** | **+0.1093** | **+0.1393** |
+| centred, mean (dArc - dCE) | 3 | **+0.0607** | **+0.1449** | **+0.1799** |
+| uncentred, mean (dArc - dCE) | 1 | +0.2599 | +0.2202 | +0.2338 |
+| uncentred, mean (dArc - dCE) | 3 | +0.3284 | +0.2773 | +0.2910 |
+
+**The centred difference-in-changes increases monotonically with K at both
+fixed epochs. The uncentred one does not** (K=100 is the largest, K=250 the
+smallest, at both epochs). The two conventions therefore disagree about
+whether anything varies with K, which is itself a reason not to state a K
+trend as a property of the mechanism.
+
+Per-cell spread at epoch 1, centred: K=100 spans +0.0185 to +0.0971, K=250
++0.0909 to +0.1342, K=1000 +0.1100 to +0.1687. Adjacent K **overlap**, and
+K=100's low mean rests heavily on fc60 (+0.0185) and fc95 (+0.0205).
+
+### Retain utility as a within-head change
+
+Reference is each head's **own** pre-unlearning retain accuracy (that cell's
+epoch-0 `output_retain`). Raw CE-versus-ArcFace retain accuracy is **not** the
+cost of the intervention — the heads differ in retain accuracy before any
+unlearning.
+
+| K | worst CE change (pp) | worst ArcFace change (pp) |
+|---|---|---|
+| 100 | -1.13 | -0.41 |
+| 250 | -0.70 | -0.25 |
+| 1000 | -0.15 | -0.32 |
+
+Every matched-epoch within-head retain change is within **1.13pp** of that
+head's own baseline, in both directions, at every K. No cell forgot by
+breaking the model. End-of-budget `probe_retain` and `ncc_retain` are likewise
+flat within each head.
+
+### Sign changes
+
+**No centred or uncentred sign reversal occurs in any of the 24 cells**, at
+any epoch. ArcFace's uncentred NC3 is **already negative at epoch 0**
+(about -0.88 to -0.90) — exactly the case the CLAUDE.md guard covers — so its
+negative post-unlearning value is **not** a flip. Every uncentred figure here
+is a within-head change from that cell's own baseline and is never used as a
+CE-versus-ArcFace level comparison.
+
+### Conclusions, scoped — five distinct things, not one
+
+1. **Sign reversal: none, in either head, at either convention, in all 24
+   cells.** The `w_k^un = -(1-gamma) mu_k` flip the AISTATS theory predicts
+   does not appear under this method and budget at any K, for CE either.
+2. **Magnitude of within-head centred NC3 movement: CE moves, ArcFace barely
+   does.** CE -0.086 to -0.169 at the matched epoch; ArcFace -0.067 to +0.041.
+   Difference-in-changes positive in 11/11 matched cells. In the **uncentred**
+   convention both heads move in the same direction and CE still moves more
+   (about -0.26 to -0.36 against -0.027 to -0.043).
+3. **Raw endpoint geometry: not interpretable as a head effect.** ArcFace ends
+   higher on centred NC3 and far lower on uncentred, but it started that way.
+   Use (2), not the endpoint levels.
+4. **Output forgetting: both heads succeed, CE sooner.** CE reaches
+   `output_forget=0` by epoch 1 in 11/12 cells; ArcFace is slower in 7/12 and
+   has one cell (K=100 fc95) that never reaches 0 in three epochs.
+5. **Retain utility: essentially unchanged in both heads,** within 1.13pp of
+   each head's own baseline everywhere.
+
+On whether the CE-versus-ArcFace difference **changes systematically with K**:
+the centred difference-in-changes orders monotonically K=100 < K=250 < K=1000
+at both fixed epochs, driven mainly by CE's own movement growing with K, while
+ArcFace stays near zero at K=250 and K=1000. **This is descriptive only.**
+Adjacent K overlap per-cell, the uncentred convention shows **no** such
+ordering, K=100's mean depends heavily on two of its four cells, and K=500 —
+which would have sat between K=250 and K=1000 — is **absent**, so the ordering
+rests on three points.
+
+### Explicitly not claimed
+
+- **No statistical significance claim.** One seed, four forget classes per K,
+  three K values with cells. Nothing here is a test.
+- **No representation-erasure claim.** The backbone is frozen in every cell,
+  so features cannot move by construction; `probe_forget` is a 10-image
+  measurement at 0.1 granularity and is not evidence about representations.
+- **No class-count causality claim.** K co-varies with retain-set size, number
+  of retain steps per epoch, spacing of the nine active steps within an epoch,
+  BatchNorm exposure and the difficulty of the classification problem itself.
+- **Fixed forget dose is not fixed total optimization.** `m=9`, `lambda=1` and
+  27 active forget-bearing steps are identical at every K, but retain steps per
+  epoch are 31 (K=100), 77 (K=250) and 303 (K=1000), so the number of retain
+  updates between consecutive forget steps, and the spacing of those steps,
+  **still vary with K**.
+- **Candidate forget exposure also varies with K**: 1240, 3080 and 12,120
+  candidate presentations per epoch at K=100, 250 and 1000. Only the *active*
+  count is held at 360.
+- **Not combined with the historical faces-100 dataset** in
+  `configs/faces100_*.yaml`: different source directory, different
+  `min_images`, unrecorded extraction seed. Those runs are a separate lineage.
+- **Four K values and one seed are limited evidence**, and only three of the
+  four carry unlearning cells.
+
+### Provenance and preservation
+
+All 24 cells at commit `51c38be`, clean tree, every run through `RunDir`.
+K=1000 cells reuse the `logs/faces_{ce,arcface}_seed0` baselines (configs
+verified identical to `configs/facesK1000_*.yaml` on data, head, train,
+backbone and seed); K=100/250 use their own in-tree baselines. K=1000 ArcFace
+cells ran on the same physical GPU as all other Wave-1 cells; each K in Wave 2
+ran its CE and ArcFace halves on one GPU, so **no head comparison carries a
+device difference**. The `unlearn_pass1_nan_uncentred` trees at K=100 and
+K=1000 are preserved unmodified and were not read for any value here.
+
+**Supersedes:** nothing. The 2026-09-14 100-identity entry stands; this
+extends it across class count and adds the within-head-change framing that the
+raw cross-head levels do not support. The open question of which epoch
+convention to report `nc3_*_forget` at remains open — this entry reports
+matched-outcome, epoch-1 and epoch-3 side by side rather than choosing.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
