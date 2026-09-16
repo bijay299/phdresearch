@@ -17,6 +17,17 @@ venv/
 *.egg-info/
 .pytest_cache/
 
+# Internal assistant instruction files -- local working aids, not part of the
+# research record. Exact paths only: notes/decisions.md and everything under
+# configs/, src/, scripts/ stay tracked.
+/CLAUDE.md
+/CLAUDE.local.md
+/claude.md
+/AGENTS.md
+/.claude/
+/.cursorrules
+/.github/copilot-instructions.md
+
 # Editor / OS
 .DS_Store
 .idea/
