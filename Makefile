@@ -13,6 +13,7 @@ test:
 	python src/test_feature_movement_driver.py
 	python src/test_dose_schedule.py
 	python src/test_class_sweep_dose.py
+	python src/test_decomposition_state.py
 
 # Wiring check, CPU, ~2 min.
 smoke:

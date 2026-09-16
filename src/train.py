@@ -146,7 +146,8 @@ def output_accuracy(labels: np.ndarray, preds: np.ndarray,
 def evaluate_light(backbone: nn.Module, head: nn.Module,
                    train_eval_loader: DataLoader, test_loader: DataLoader,
                    num_classes: int, device: str, forget_class: int,
-                   seed: int = 0, include_uncentred: bool = False) -> Dict:
+                   seed: int = 0, include_uncentred: bool = False,
+                   state_hook: Optional[Callable] = None) -> Dict:
     """
     A cheap subset of `evaluate()`, for tracking one point on an unlearning
     TRAJECTORY (measured every epoch) rather than only the end-of-run row.
@@ -168,6 +169,24 @@ def evaluate_light(backbone: nn.Module, head: nn.Module,
     reference -- same convention as `evaluate`, not the uncentred one
     `--compare` prints (see notes/decisions.md, centring contamination).
 
+    `state_hook` -- opt-in, and it must stay RNG-neutral
+    ---------------------------------------------------
+    When given, it is called once as
+    `state_hook(train_features, train_labels, weight)` with exactly the arrays
+    this function ALREADY extracted and the weight matrix it ALREADY read, so a
+    caller can save the geometric state (weights, class means) that produced
+    the scalars below. Default None leaves every existing caller with the
+    identical dict it had.
+
+    It takes those arrays rather than the model on purpose. Re-extracting
+    features inside a hook would build fresh DataLoader iterators, and PyTorch
+    draws a base seed from the global CPU RNG every time an iterator is
+    constructed -- which would shift the retain/forget shuffle of every
+    subsequent unlearning epoch and change the run being measured. Reusing the
+    already-extracted arrays consumes no randomness, runs no forward pass and
+    touches no parameter, so enabling the hook cannot alter the trajectory.
+    `src/test_decomposition_state.py` asserts that bitwise.
+
     `include_uncentred` additionally returns `nc3_uncentred_forget`, the
     convention the AISTATS prediction is actually stated in. It is OFF by
     default so every existing caller keeps the exact dict it had; the cost
@@ -183,6 +202,8 @@ def evaluate_light(backbone: nn.Module, head: nn.Module,
     out_acc = output_accuracy(y_te, p_te, forget_class)
     probe = M.linear_probe(f_tr, y_tr, f_te, y_te, target_class=forget_class, seed=seed)
     W = head.weight.detach().cpu().numpy()
+    if state_hook is not None:
+        state_hook(f_tr, y_tr, W)
     nc3_c = M.nc3_alignment(f_tr, y_tr, W, num_classes, centre=True,
                             exclude_from_centre=forget_class)
 

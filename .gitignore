@@ -3,6 +3,7 @@ data/
 logs/
 logs100/
 logs_classcount/
+logs_classcount_decomposition/
 *.pt
 *.pth
 *.npz

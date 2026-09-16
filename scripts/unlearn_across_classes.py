@@ -48,6 +48,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import data as D                      # noqa: E402
+import decomposition as DC            # noqa: E402
 import train as TR                    # noqa: E402
 import unlearn as UL                  # noqa: E402
 from backbones import build_backbone  # noqa: E402
@@ -125,6 +126,7 @@ def run_condition(cfg: dict, head_name: str, backbone0, head0, num_classes: int,
                   forget_active_steps_per_epoch: int | None = None,
                   forget_loss_weight: float = 1.0,
                   per_cell_seed: bool = False,
+                  dump_nc3_state: bool = False,
                   provenance: dict | None = None) -> dict:
     """
     One (method, forget_class) condition, starting from the shared
@@ -139,6 +141,15 @@ def run_condition(cfg: dict, head_name: str, backbone0, head0, num_classes: int,
     before those parameters existed: those are `src/unlearn.py`'s own
     defaults, and the one-reseed-up-front convention is what `main` always
     did. `src/test_class_sweep_dose.py` pins that.
+
+    `dump_nc3_state` additionally saves, per trajectory epoch, the exact
+    weight matrix and class-mean matrix that produced that epoch's NC3
+    numbers -- the state the reference-frame decomposition needs and that no
+    canonical cell ever wrote. It is OFF by default and RNG-neutral: it reuses
+    the arrays `evaluate_light` already extracted (see that function's
+    `state_hook` note) rather than re-extracting, so it builds no DataLoader
+    iterator and consumes no randomness. `src/test_decomposition_state.py`
+    pins the resulting model bitwise against a dump-free run.
 
     `per_cell_seed` reseeds immediately before the method, so a cell is
     reproducible on its own rather than depending on how many cells ran
@@ -177,13 +188,33 @@ def run_condition(cfg: dict, head_name: str, backbone0, head0, num_classes: int,
     dose_controlled = (forget_active_steps_per_epoch is not None
                        or float(forget_loss_weight) != 1.0)
 
+    # Written by the state hook below, never read back into the run.
+    nc3_state_files: list[str] = []
+
     def epoch_eval(bb, hd, epoch):
         if epoch not in (0, epochs) and epoch % trajectory_every != 0:
             return
+
+        hook = None
+        if dump_nc3_state:
+            def hook(f_tr, y_tr, W, _epoch=epoch):
+                mu = DC.class_mean_matrix(f_tr, y_tr, num_classes)
+                fname = f"nc3_state_ep{_epoch}.npz"
+                np.savez(rd.path(fname),
+                         weight=np.ascontiguousarray(W),
+                         class_means=np.ascontiguousarray(mu),
+                         present=DC.present_mask(mu),
+                         centre_ref=DC.centre_mask(mu, forget_class),
+                         epoch=np.int64(_epoch),
+                         forget_class=np.int64(forget_class),
+                         num_classes=np.int64(num_classes))
+                nc3_state_files.append(fname)
+
         point = TR.evaluate_light(bb, hd, train_eval_loader, test_loader,
                                   num_classes, device,
                                   forget_class=forget_class, seed=cfg["seed"],
-                                  include_uncentred=dose_controlled)
+                                  include_uncentred=dose_controlled,
+                                  state_hook=hook)
         rd.append_jsonl("trajectory.jsonl", {
             "head": head_name, "method": tag, "forget_class": forget_class,
             "seed": cfg["seed"], "epoch": epoch, **point,
@@ -326,6 +357,8 @@ def run_condition(cfg: dict, head_name: str, backbone0, head0, num_classes: int,
         "retain_steps_per_epoch": int(steps_per_epoch),
         "training_trace_sha256": trace_state["h"].hexdigest(),
         "active_dose_trace_sha256": dose_state["h"].hexdigest(),
+        "nc3_state_dumped": bool(dump_nc3_state),
+        "nc3_state_files": sorted(nc3_state_files),
         "dose_predicted": dose_pred,
         "dose_observed": dose_obs,
         "provenance": provenance,
@@ -389,6 +422,7 @@ def main(cfg: dict, forget_classes: list[int], ckpt_path: Path,
         forget_active_steps_per_epoch: int | None = None,
         forget_loss_weight: float = 1.0,
         per_cell_seed: bool = False,
+        dump_nc3_state: bool = False,
         out_dir: str | None = None) -> None:
     device = resolve_device(cfg.get("device", "auto"))
     set_seed(cfg["seed"])   # once, up front -- matches run_experiment.py's
@@ -426,7 +460,8 @@ def main(cfg: dict, forget_classes: list[int], ckpt_path: Path,
                           bs=bs, nw=nw, out_dir=out,
                           forget_active_steps_per_epoch=forget_active_steps_per_epoch,
                           forget_loss_weight=forget_loss_weight,
-                          per_cell_seed=per_cell_seed, provenance=prov)
+                          per_cell_seed=per_cell_seed,
+                          dump_nc3_state=dump_nc3_state, provenance=prov)
 
 
 if __name__ == "__main__":
@@ -462,6 +497,12 @@ if __name__ == "__main__":
                          "cell does not depend on how many cells ran before "
                          "it. Off by default to preserve existing behaviour; "
                          "required for a controlled sweep across class counts.")
+    ap.add_argument("--dump-nc3-state", action="store_true",
+                    help="also save, per trajectory epoch, the weight matrix "
+                         "and class-mean matrix that produced that epoch's "
+                         "NC3 values (nc3_state_ep<N>.npz). Needed by "
+                         "scripts/nc3_decomposition.py; off by default and "
+                         "RNG-neutral, so the run is bitwise unchanged.")
     ap.add_argument("--out-dir", default=None,
                     help="override the config's out_dir for the unlearning "
                          "cells, so a controlled sweep can write somewhere "
@@ -487,4 +528,5 @@ if __name__ == "__main__":
         forget_active_steps_per_epoch=a.forget_active_steps_per_epoch,
         forget_loss_weight=a.forget_loss_weight,
         per_cell_seed=a.per_cell_seed,
+        dump_nc3_state=a.dump_nc3_state,
         out_dir=a.out_dir)
