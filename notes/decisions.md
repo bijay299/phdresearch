@@ -2332,6 +2332,215 @@ retain-utility-loss finding stand as recorded.
 
 ---
 
+## 2026-09-15 — faces-1000 dose-component matrix: coefficient mass alone does not determine the outcome
+
+**Decided:** Record the four-cell dose-component matrix (O/D/A/B) as a
+mechanism diagnostic and **stop the dose grid here**. The two ablations
+proposed on 2026-09-15 (`m=9, lambda=1` and
+`m=303, lambda=0.009293729372937293`) have now been run.
+
+### Conditions
+
+| cell | m (active steps/epoch) | lambda |
+|---|---|---|
+| **O** uncontrolled | 303 | 1 |
+| **D** dual-dose | 9 | 0.3128888888888889 |
+| **A** low-cadence / unit-weight | 9 | 1 |
+| **B** all-steps / coefficient-matched | 303 | 0.009293729372937293 |
+
+### Provenance
+
+All eight runs share baseline `logs/faces_arcface_seed0`, checkpoint sha256
+`48c19bfd2ff84d17eda447dfd73417894859b5c6a71936a8888ff8b75fea5d80`, observed
+train_eval index sha256 `1e80ea55e15b5c0a46bff56de8577f767cc261d3b65b73ceb50732baf8027f6c`,
+ArcFace, seed 0, forget class 0, 3 epochs, 32-of-999 deterministic controls,
+`git_dirty: false`. Every candidate `training_trace_sha256` equals
+`f9c5f9fdc3c6fcfdfe88a37b708d77168c0e4271f74802e38c2b780e2f707806` — the dose
+changed what the loop did with the stream, never the stream.
+
+| cell | active_dose_trace_sha256 | full member | frozen member | commit | phys GPU |
+|---|---|---|---|---|---|
+| O | (none — pre-dose artifact) | `feature_movement_paired/..._full_fc0` | `..._clfonly_fc0` | `0bf8f05` | 3 |
+| D | `203df28a2ac48a4264c12ea6a005ed4f7bf12a417b9c2a5c211d3a7a76026ff8` | `feature_movement_dose/..._dualdose_full_fc0` | `..._dualdose_clfonly_fc0` | `0f5bcc2` | 1 |
+| A | `6cb9499aa1b6dee13ce2727d1fc2dc493a0be94a3f49869d038ac02d63d09b94` | `feature_movement_ablation/..._m9_w1_full_fc0` | `..._m9_w1_clfonly_fc0` | `87c7a0e` | 0 |
+| B | `ea53dbabf1ced2f4880d99b3836724537fc4d2aef1f956d0831b946e402974cf` | `feature_movement_ablation/..._m303_coeffmatched_full_fc0_gpu0rep` | `..._m303_coeffmatched_clfonly_fc0` | `87c7a0e` | 0 |
+
+Dose hashes are equal within each pair and distinct across cells, as their
+schedules and weights differ.
+
+**Authoritative B pair is same-device (both physical GPU 0).** The first
+B-full (`..._m303_coeffmatched_full_fc0`, physical GPU 2) is retained **only as
+cross-device replication evidence**: it was re-run on GPU 0 as
+`scientific_role: instrumented_replication`, and the two agree **bitwise** —
+maximum absolute difference 0.000e+00 across `output_retain`,
+`output_overall`, `probe_retain`, `nc1_angular`, centred and uncentred NC3
+(forget and retain-mean), `aligned_forget`, `aligned_retain_eval`,
+`control_mean_deg` and `cka_linear_secondary` at every epoch, with identical
+discrete outputs, first-zero epoch, sign flags and hashes. The weighted-mass
+residual `8.448000000000079` against a predicted `8.448` is a deterministic
+float accumulation identical in all three B artifacts and well inside the
+driver's 1e-9 relative tolerance.
+
+### Dose accounting per epoch — predicted == observed
+
+| cell | candidate | active | active/image | active steps | weighted mass | coeff/image |
+|---|---|---|---|---|---|---|
+| O | 12,120 | 12,120 | 303 | 303 | 303* | 7.575* |
+| D | 12,120 | 360 | 9 | 9 | 2.816 | 0.0704 |
+| A | 12,120 | 360 | 9 | 9 | **9** | **0.225** |
+| B | 12,120 | 12,120 | 303 | 303 | **2.816** | **0.0704** |
+
+*O has no dose-accounting block; its figures are **our arithmetic** from its
+uncontrolled schedule (every step active, weight 1), not read from the
+artifact. D, A and B agree exactly with prediction on all four totals in both
+members.
+
+**Neither the presentation counts nor the weighted coefficient is a gradient
+magnitude.** Both are counts and loss coefficients derived from the loop
+structure; actual gradients were not measured.
+
+### New epoch tables
+
+Epoch 0 is identical in all eight runs: out_f 0.7000, out_r 0.7272,
+probe_f 0.7000, centred **+0.8875**, uncentred **-0.8846**, movement 0.000,
+CKA 1.0000.
+
+**A full model** (`m=9, lambda=1`)
+
+| ep | out_f | out_r | probe_f | nc3_c | nc3_u | aligned_fgt | ctrl | cka |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0.5000 | 0.7225 | 0.7000 | +0.6688 | -0.9027 | 1.730 | 1.282 | 0.9921 |
+| 2 | 0.2000 | 0.7209 | 0.7000 | +0.6502 | -0.9112 | 2.396 | 1.611 | 0.9876 |
+| 3 | 0.1000 | 0.7257 | 0.7000 | +0.6312 | -0.9174 | 2.317 | 1.475 | 0.9898 |
+
+**A frozen backbone (paired control)**
+
+| ep | out_f | out_r | probe_f | nc3_c | nc3_u | aligned_fgt | ctrl | cka |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0.0000 | 0.7244 | 0.7000 | +0.9280 | -0.9173 | 0.000 | 0.000 | 1.0000 |
+| 2 | 0.0000 | 0.7249 | 0.7000 | +0.9380 | -0.9241 | 0.000 | 0.000 | 1.0000 |
+| 3 | 0.0000 | 0.7259 | 0.7000 | +0.9445 | -0.9282 | 0.000 | 0.000 | 1.0000 |
+
+**B full model** (`m=303, lambda=0.009293729372937293`; GPU-0 replication)
+
+| ep | out_f | out_r | probe_f | nc3_c | nc3_u | aligned_fgt | ctrl | cka |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0.2000 | 0.6850 | 0.7000 | +0.2404 | -0.9289 | 6.121 | 3.498 | 0.9366 |
+| 2 | 0.0000 | 0.6799 | 0.7000 | +0.2525 | -0.9366 | 6.797 | 3.775 | 0.9275 |
+| 3 | 0.0000 | 0.6874 | 0.7000 | +0.2737 | -0.9404 | 6.221 | 3.508 | 0.9376 |
+
+**B frozen backbone (paired control)**
+
+| ep | out_f | out_r | probe_f | nc3_c | nc3_u | aligned_fgt | ctrl | cka |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0.3000 | 0.7249 | 0.7000 | +0.9146 | -0.9083 | 0.000 | 0.000 | 1.0000 |
+| 2 | 0.0000 | 0.7251 | 0.7000 | +0.9243 | -0.9155 | 0.000 | 0.000 | 1.0000 |
+| 3 | 0.0000 | 0.7257 | 0.7000 | +0.9307 | -0.9200 | 0.000 | 0.000 | 1.0000 |
+
+Frozen feature movement is **exactly 0.000** with CKA **exactly 1.0000** in
+every row of both frozen runs.
+
+### Fixed-epoch comparison — full members
+
+| ep | cell | out_f | out_r | probe_f | nc3_c | nc3_u | aligned_fgt | ctrl | cka |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | O | 0.0000 | 0.6724 | 0.7000 | +0.2221 | -0.9519 | 9.493 | 4.950 | 0.8791 |
+| 1 | D | 0.5000 | 0.7215 | 0.7000 | +0.6609 | -0.9022 | 1.414 | 1.269 | 0.9922 |
+| 1 | A | 0.5000 | 0.7225 | 0.7000 | +0.6688 | -0.9027 | 1.730 | 1.282 | 0.9921 |
+| 1 | B | 0.2000 | 0.6850 | 0.7000 | +0.2404 | -0.9289 | 6.121 | 3.498 | 0.9366 |
+| 3 | O | 0.0000 | 0.6396 | 0.9000 | +0.2473 | -0.9701 | 11.484 | 6.745 | 0.7439 |
+| 3 | D | 0.1000 | 0.7266 | 0.7000 | +0.6472 | -0.9160 | 1.865 | 1.430 | 0.9904 |
+| 3 | A | 0.1000 | 0.7257 | 0.7000 | +0.6312 | -0.9174 | 2.317 | 1.475 | 0.9898 |
+| 3 | B | 0.0000 | 0.6874 | 0.7000 | +0.2737 | -0.9404 | 6.221 | 3.508 | 0.9376 |
+
+### Fixed-epoch comparison — frozen members
+
+| ep | cell | out_f | out_r | nc3_c | nc3_u |
+|---|---|---|---|---|---|
+| 1 | O | 0.0000 | 0.7198 | +0.9789 | -0.9534 |
+| 1 | D | 0.3000 | 0.7247 | +0.9144 | -0.9081 |
+| 1 | A | 0.0000 | 0.7244 | +0.9280 | -0.9173 |
+| 1 | B | 0.3000 | 0.7249 | +0.9146 | -0.9083 |
+| 3 | O | 0.0000 | 0.7234 | +0.9474 | -0.9601 |
+| 3 | D | 0.0000 | 0.7263 | +0.9307 | -0.9199 |
+| 3 | A | 0.0000 | 0.7259 | +0.9445 | -0.9282 |
+| 3 | B | 0.0000 | 0.7257 | +0.9307 | -0.9200 |
+
+### First epoch at which BOTH members show zero output forgetting
+
+| cell | full | frozen | first common |
+|---|---|---|---|
+| O | 1 | 1 | **1** |
+| D | never | 2 | **none** |
+| A | never | 1 | **none** |
+| B | 2 | 2 | **2** |
+
+### Conclusions, scoped
+
+1. **A versus D — coefficient mass at the fixed nine-step cadence.** Raising
+   weighted mass from 2.816 to 9 (lambda 0.3129 -> 1) produced the **same
+   output_forget trajectory at the available 0.1 resolution** (0.5 / 0.2 / 0.1)
+   and only modest differences in continuous metrics: epoch-3 centred NC3
+   +0.6312 against +0.6472, movement 2.317 deg against 1.865 deg, retain 0.7257
+   against 0.7266. State this as **no detectable output difference in this
+   cell**, *not* as "lambda is inert" — the forget test set resolves only to
+   0.1, and the continuous metrics did move.
+
+2. **B versus O — lambda at the all-step cadence.** Reducing lambda delayed
+   complete output forgetting from **epoch 1 to epoch 2**, reduced movement
+   (epoch 3: 6.221 deg against 11.484 deg), reduced fixed-budget utility loss
+   (retain 0.6874 against 0.6396) and left centred NC3 **broadly similar**
+   (+0.2737 against +0.2473).
+
+3. **B versus D — identical total coefficient mass, different distribution.**
+   Both carry 2.816 weighted mass per epoch and 0.0704 per unique forget image.
+   Spread across **303** active forwards rather than **nine**, the same mass
+   produced stronger forgetting (epoch 3 out_f 0.0000 against 0.1000), greater
+   movement (6.221 deg against 1.865 deg) and more utility degradation (retain
+   0.6874 against 0.7266). **Therefore total weighted coefficient mass alone is
+   insufficient to determine the outcome.** The contrast **bundles** temporal
+   distribution, active forward exposure, BatchNorm exposure and per-step
+   weighting; it is **not a pure cadence effect** and no component is isolated.
+
+4. **B matched outcome — both members reach `output_forget = 0` at epoch 2.**
+   Full centred NC3 **+0.2525**; frozen centred NC3 approximately **+0.9243**;
+   full aligned forget movement **6.797 deg**; frozen movement **0 deg**; full
+   retain **0.6799**; frozen retain approximately **0.7251**. The
+   **4.52pp full-versus-frozen retain-accuracy gap is a utility confound.**
+   The centred-NC3 gap therefore repeats at a matched output outcome, but
+   **it cannot be attributed solely to freezing.**
+
+5. **No face condition exhibits a centred or uncentred sign reversal**, in any
+   row of any of the eight runs. Uncentred baselines are **already negative**
+   (-0.8846 at epoch 0), exactly the case the CLAUDE.md guard covers; every
+   uncentred value here is a within-head change from that baseline and never a
+   CE-versus-ArcFace comparison.
+
+6. **Stop the dose grid here.** These four cells are a **mechanism
+   diagnostic**, not a parameter search and not a CIFAR-equivalent comparison.
+
+No claim is made about gradient magnitude, representation erasure, statistical
+significance, head superiority, class-count causality, or clean isolation of
+cadence and BatchNorm effects.
+
+### Limitations
+
+- One identity, one seed, one head, one method, fixed 3-epoch budget.
+- The forget test set is **ten images**, so `output_forget` and `probe_forget`
+  are 0.1-granular; `probe_forget` never left 0.7000 in any A or B row.
+- Controls are a **32-of-999 deterministic sample**, descriptive and
+  **non-exchangeable** with the forget measurement. No significance claim.
+- `split_mode=all`, so nothing here speaks to held-out generalisation.
+- **O's dose values are derived arithmetic**, not read from an artifact.
+- The **cross-device B run is retained only as replication evidence**; the
+  authoritative B pair is the same-device GPU-0 pair.
+
+**Supersedes:** nothing. The uncontrolled faces pair, the dual-dose tradeoff
+entry and their findings all stand as recorded. This entry closes the two
+follow-up ablations proposed in the dual-dose entry above.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
