@@ -2799,6 +2799,252 @@ matched-outcome, epoch-1 and epoch-3 side by side rather than choosing.
 
 ---
 
+## 2026-09-16 — centred-NC3 reference-frame decomposition: the K trend is not the retain centre, and it is not more weight movement either
+
+**Decided:** The centred class-count trend is **not** an artefact of the
+retain-weight centre moving. Holding that centre fixed at epoch 0 reproduces
+the ordering essentially unchanged, and moving only the centre reproduces
+nothing. But the trend is **also not** more forget-weight movement at larger
+K: CE's forget weight rotates by the same amount at every K. The ordering is a
+property of the **baseline angle** the centred frame places that rotation at,
+which varies with K through the **feature-side** centre. This **refines** the
+sweep's conclusion; it does not overturn it.
+
+**Because:** the 2026-09-16 sweep left `dArcFace - dCE` ordering K=100 < 250 <
+1000 in the centred convention and not in the uncentred one. Centred NC3
+subtracts a reference frame that can itself move, so a change in the metric is
+not by itself a statement about the forget-class weight. That had to be
+resolved before spending a seed on replication.
+
+### What was measured, and how it was obtained
+
+No canonical cell ever saved head state: each holds `config.json`, `env.json`,
+`result.json`, `results.jsonl`, `run.log`, `trajectory.jsonl` and nothing else,
+and the only six `ckpt.pt` files under `logs_classcount/` are *baselines*. The
+audit therefore concluded the decomposition was impossible from existing
+artifacts, and all 24 cells were **deterministically replayed** with opt-in
+instrumentation into `logs_classcount_decomposition/`. **Canonical directories
+were read only, never written.**
+
+The instrumentation (commit `653d55f`) is `evaluate_light(state_hook=...)`,
+which hands the hook the arrays that function **already extracted**. It does
+not re-extract: a fresh DataLoader iterator draws a base seed from the global
+CPU RNG, which would reshuffle every later unlearning epoch. That inertness is
+asserted bitwise in `src/test_decomposition_state.py` (parameters, global RNG
+state and training-trace hash identical with and without the hook).
+
+### Definitions — taken from production, not reinvented
+
+`train.evaluate_light` passes `head.weight` to `metrics.nc3_alignment` **raw**
+(`fc.weight` for CE, `W` for ArcFace, neither row-normalised); the cosine
+normalises internally. `src/decomposition.py` imports `_l2` and `class_means`
+from `metrics` rather than retyping them, including the `1e-12` denominator
+guard, so it cannot drift from the metric it decomposes.
+
+    w_t = W_t[fc]                          effective forget weight, raw row
+    c_t = W_t[ref].mean(0)                 retain-weight centre, ref = present & != fc
+    f_0 = mu[fc]                           forget-class feature mean
+    g_0 = nanmean(mu[ref])                 feature-side centre
+    A(w, c) = cos(f_0 - g_0, w - c)        production centred NC3, forget row
+    U(w)    = cos(f_0, w)                  production uncentred NC3, forget row
+
+`f_0` and `g_0` are constant across epochs because the backbone is frozen.
+That was **verified, not assumed**: the class-mean matrix is bit-identical at
+epochs 0-3 in all 24 cells (sha256 of the float64 bytes), and the `present` and
+centring masks are unchanged.
+
+The two counterfactuals are **descriptive interventions on the metric**. `A`
+normalises both arguments, so it is not additive; the residual
+`A(w_t,c_t) - A(w_t,c_0) - A(w_0,c_t) + A(w_0,c_0)` is the exact arithmetic
+leftover of a nonlinear function at four corners, **not** a causal or
+statistical interaction. `test_residual_is_nonzero_when_both_move` exists
+specifically so the corners can never be read as contributions.
+
+### Replay gates — 24/24, exact
+
+Representative cell first (K=1000, ArcFace, fc0, GPU 1): per-epoch training
+losses identical (21.0504 / 21.2566 / 21.2445), `training_trace_sha256`
+`4ce51788…` and `active_dose_trace_sha256` `a6960f3e…` identical, all 24
+trajectory values at epochs 0-3 identical **bit for bit**. Only then were the
+remaining cells launched.
+
+All 24 cells then passed, with no exceptions: epochs 0-3 present; `output_forget`,
+`output_retain`, `probe_forget`, `nc3_centred_forget`, `nc3_uncentred_forget`
+and `nc1_angular` exactly equal to canonical at every epoch; both trace hashes
+exactly equal; identity/image/train/test/baseline-checkpoint hashes equal;
+`m=9`, `lambda=1`, `update_mode=classifier_only`, `per_cell_seed=True`; centred
+and uncentred NC3 **recomputed from the saved weight and class-mean matrices**
+exactly equal to the trajectory values; epoch-0 corners collapsing to one
+baseline with zero change and zero residual; the residual identity closing to
+floating-point tolerance; every quantity finite.
+
+The replayed per-head means reproduce this entry's predecessor exactly — at
+epoch 1, centred `dCE` = -0.0948 / -0.1053 / -0.1378 and `dArcFace` =
+-0.0374 / +0.0041 / +0.0015 at K = 100 / 250 / 1000.
+
+### The decomposition — `dArcFace - dCE`, our arithmetic
+
+| convention | ep | K=100 | K=250 | K=1000 |
+|---|---|---|---|---|
+| centred, production `A(w_t,c_t)` | 1 | +0.0574 | +0.1093 | +0.1393 |
+| centred, **centre fixed at epoch 0** `A(w_t,c_0)` | 1 | +0.0561 | +0.1087 | +0.1393 |
+| centred, **weight fixed at epoch 0** `A(w_0,c_t)` | 1 | +0.0004 | +0.0002 | +0.0003 |
+| interaction residual | 1 | +0.0010 | +0.0004 | -0.0003 |
+| uncentred, production | 1 | +0.2599 | +0.2202 | +0.2338 |
+| centred, production | 3 | +0.0607 | +0.1449 | +0.1799 |
+| centred, **centre fixed at epoch 0** | 3 | +0.0587 | +0.1435 | +0.1810 |
+| centred, **weight fixed at epoch 0** | 3 | +0.0005 | +0.0006 | +0.0010 |
+| interaction residual | 3 | +0.0014 | +0.0007 | -0.0022 |
+| uncentred, production | 3 | +0.3284 | +0.2773 | +0.2910 |
+
+Across all 24 cells and 4 epochs: largest `|dCentreOnly|` = **0.0065**, largest
+`|residual|` = **0.0068**, against a largest `|dProd|` of **0.2007**.
+
+### Movement of each moving part — mean over the four identities
+
+| K | head | ep | forget-weight rotation | forget-weight norm ratio | retain-centre rotation | centred-weight rotation |
+|---|---|---|---|---|---|---|
+| 100 | ce | 1 | 17.82° | 0.874 | 7.34° | 17.81° |
+| 250 | ce | 1 | 16.74° | 0.851 | 6.73° | 16.74° |
+| 1000 | ce | 1 | 17.41° | 0.851 | 14.55° | 17.41° |
+| 100 | arcface | 1 | 3.28° | 1.001 | 0.005° | 5.30° |
+| 250 | arcface | 1 | 4.74° | 1.001 | 0.021° | 2.83° |
+| 1000 | arcface | 1 | 4.56° | 0.999 | 0.021° | 5.55° |
+| 100 | ce | 3 | 22.60° | 0.857 | 9.11° | 22.60° |
+| 250 | ce | 3 | 20.79° | 0.830 | 8.14° | 20.79° |
+| 1000 | ce | 3 | 21.49° | 0.830 | 17.77° | 21.49° |
+| 100 | arcface | 3 | 5.22° | 1.001 | 0.024° | 9.82° |
+| 250 | arcface | 3 | 6.23° | 1.000 | 0.035° | 4.10° |
+| 1000 | arcface | 3 | 6.15° | 0.996 | 0.068° | 8.16° |
+
+### Why the centre contributes nothing, for two opposite reasons
+
+| K | head | mean `\|c_0\|` / `\|w_0\|` |
+|---|---|---|
+| 100 | ce | 0.0248 |
+| 250 | ce | 0.0104 |
+| 1000 | ce | **0.0012** |
+| 100 | arcface | 0.9598 |
+| 250 | arcface | 1.0074 |
+| 1000 | arcface | 0.9692 |
+
+**CE's retain-weight centre is nearly the zero vector** — 999 weights that
+almost cancel — and gets 20x smaller from K=100 to K=1000. Its large *angular*
+movement (up to 17.8°) is the rotation of a near-zero-length vector and moves
+the metric by ~1e-4. This is why CE's centred-weight rotation equals its
+forget-weight rotation to three decimals in every row above.
+
+**ArcFace's centre is nearly as long as the weight itself** (ratio ~0.96-1.01)
+— the shared-component offset behind its baseline uncentred NC3 of about -0.88
+(CLAUDE.md's empirical guard). Centring therefore matters a great deal to
+ArcFace's *level*, but the centre barely *moves* (0.02-0.07°), so it
+contributes nothing to the *change*.
+
+### Where the K ordering actually lives
+
+CE's forget weight rotates by **the same amount at every K** — 17.8° / 16.7° /
+17.4° at epoch 1, 22.6° / 20.8° / 21.5° at epoch 3, non-monotone and spanning
+about 1.8°. The centred `dCE` nevertheless grows monotonically. Reading both
+conventions in the angle domain (mean over the four identities, epoch 1):
+
+| K | head | baseline θ centred | Δθ centred | baseline θ uncentred | Δθ uncentred |
+|---|---|---|---|---|---|
+| 100 | ce | 31.93° | +9.14° | 57.97° | +17.77° |
+| 250 | ce | 34.15° | +9.60° | 53.21° | +16.69° |
+| 1000 | ce | 39.05° | +11.32° | 54.07° | +17.35° |
+
+In the **uncentred** frame essentially the whole rotation is directed away from
+`f_0` (Δθ ≈ the full 16.7-17.8°), and the baseline angle orders
+58.0° > 54.1° > 53.2° — **non-monotone**, K=100 largest and K=250 smallest.
+Since a cosine's sensitivity to rotation is `-sin θ`, the uncentred changes
+inherit exactly that non-monotone order: -0.2841 / -0.2552 / -0.2681.
+
+In the **centred** frame only about half the rotation is directed away from the
+reference, but both the baseline angle (31.9° < 34.2° < 39.1°) and the
+projected rotation (9.14° < 9.60° < 11.32°) increase with K, and they push the
+same way.
+
+The centred frame's reference direction is `f_0 - g_0`, and `|g_0|/|f_0|` for
+CE is 0.80 / 0.73 / 0.69 at K = 100 / 250 / 1000. **So the K ordering enters
+through the FEATURE-side centre `g_0`, not through the retain-weight centre
+`c`.** `g_0` is fixed in time within a cell — verified bit-identical across
+epochs — so it is a fixed reference frame that happens to differ with K, not
+something unlearning moved.
+
+### Answers
+
+1. **Does the K ordering remain with the centre held at epoch 0?** Yes, nearly
+   unchanged: +0.0561 / +0.1087 / +0.1393 against a production
+   +0.0574 / +0.1093 / +0.1393 at epoch 1, and
+   +0.0587 / +0.1435 / +0.1810 against +0.0607 / +0.1449 / +0.1799 at epoch 3.
+2. **Does changing only the centre reproduce the ordering?** No. It yields
+   +0.0004 / +0.0002 / +0.0003 and +0.0005 / +0.0006 / +0.0010 — flat, and two
+   to three orders of magnitude below production.
+3. **Is ArcFace's stability forget-weight stability, centre behaviour, or
+   interaction?** The metric decomposition indicates **forget-weight
+   stability**. ArcFace's weight rotates 3.3-6.2° against CE's 16.7-22.6° and
+   keeps its norm (ratio 0.996-1.001 against CE's 0.830-0.874); its centre is
+   effectively frozen; the residual never exceeds 0.0068. The one caveat: with
+   ArcFace's own changes as small as they are, the residual reaches ~11% of the
+   production change in a single cell (K=1000 fc29, epoch 3), so "negligible in
+   absolute terms" is the defensible statement, not "negligible relative to
+   ArcFace".
+4. **Why no K ordering in the uncentred convention?** Both conventions read the
+   same, essentially K-independent, weight rotation, but at different baseline
+   angles where the cosine has different sensitivity. The uncentred baseline
+   angle is non-monotone in K and the uncentred changes track it; the centred
+   baseline angle and projected rotation are both monotone in K and reinforce.
+5. **Does this weaken, preserve or refine the sweep's conclusion?** It
+   **refines** it, and tightens two of its five conclusions. Conclusion 2
+   (CE moves, ArcFace barely does) is **strengthened**: it survives with the
+   reference frame nailed to epoch 0, and is now attributable to the forget
+   weight itself rather than to the metric's frame. The **K-trend** statement is
+   **narrowed**: it is not reference-frame drift, but neither is it "the forget
+   weight moves more at larger K", which the movement table rules out. It is
+   sensitivity of centred NC3 to a fixed reference frame that varies with K —
+   a statement about the measurement geometry, **not** evidence that class count
+   changes forget-class erasure.
+
+### Explicitly not claimed
+
+- **No causal isolation.** The counterfactuals are interventions on the metric,
+  not on the training process; `A` is nonlinear in both arguments.
+- **No statistical significance.** One seed, four fixed identities per K, three
+  K values. The means above are descriptive summaries, not replicates.
+- **No representation-erasure claim.** The backbone is frozen in every cell and
+  the class means are bit-identical across epochs — features cannot move here
+  by construction. This says nothing about representations.
+- **No generality beyond this sweep.** Within these fixed models and identities
+  only.
+- **The ordering still rests on three points and still overlaps per cell.**
+  Matched per-identity `dArcFace - dCE` under the fixed epoch-0 centre spans
+  +0.0172 to +0.0956 (K=100), +0.0902 to +0.1335 (K=250) and +0.1124 to +0.1687
+  (K=1000) at epoch 1; at epoch 3 K=100 includes a **negative** cell (fc95,
+  -0.0226). Adjacent K overlap, exactly as in the production column. K=500
+  remains absent.
+- **Norm changes do not enter the metric.** Cosine is scale-invariant, so the
+  forget-weight norm shrinkage (CE 0.83-0.87) is reported as a descriptive
+  fact about the weight, not as a driver of `nc3_*_forget`.
+
+### Provenance
+
+Instrumentation at `653d55f`, table renderer at `bcbcd92`, both pushed before
+any replay; every replay ran on a clean tree with `git_dirty=False`. Replays
+through `RunDir` into `logs_classcount_decomposition/` (gitignored) — K=1000 CE
+on GPU 0, K=1000 ArcFace on GPU 1, both K=250 halves on GPU 2, both K=100
+halves on GPU 3, all four A100-SXM4-40GB, disjoint run directories, parents
+pre-created so no two jobs raced on `mkdir`, and no other user's process
+touched. Artifacts: `logs_classcount_decomposition/decomposition.json` and
+`decomposition.md`, plus `nc3_state_ep{0,1,2,3}.npz` per cell. The gate cell is
+preserved separately under `logs_classcount_decomposition/gate/`.
+`make test` passes 11/11 suites, including the 12 new groups in
+`src/test_decomposition_state.py`.
+
+**Supersedes:** nothing. The 2026-09-16 sweep entry stands in full; this entry
+qualifies its K-trend paragraph and strengthens its conclusion 2.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
