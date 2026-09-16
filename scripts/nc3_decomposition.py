@@ -250,11 +250,84 @@ def summarise(cells: list[dict], epoch: int) -> list[dict]:
     return rows
 
 
+def render_markdown(out: dict) -> str:
+    """Per-cell evidence first, aggregates second.
+
+    The per-cell tables are the evidence; the aggregate tables below them are
+    descriptive means over four fixed identities at one seed, and are labelled
+    as such wherever they appear.
+    """
+    L: list[str] = []
+    cells = sorted(out["cells"], key=lambda c: (c["K"], c["head"],
+                                                c["forget_class"]))
+
+    for epoch in (1, 3):
+        L.append(f"\n### Per-cell decomposition, epoch {epoch}\n")
+        L.append("| K | head | fc | w angle | w norm | c angle | c norm | "
+                 "(w-c) angle | dProd | dWeightOnly | dCentreOnly | resid | "
+                 "dUncentred |")
+        L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        for c in cells:
+            e = c["epochs"][str(epoch)]
+            L.append(
+                f"| {c['K']} | {c['head']} | {c['forget_class']} | "
+                f"{e['forget_weight']['angle_deg']:.3f}° | "
+                f"{e['forget_weight']['norm_ratio']:.4f} | "
+                f"{e['retain_centre']['angle_deg']:.3f}° | "
+                f"{e['retain_centre']['norm_ratio']:.4f} | "
+                f"{e['centred_forget_weight']['angle_deg']:.3f}° | "
+                f"{e['delta_centred_production']:+.4f} | "
+                f"{e['delta_centred_weight_only']:+.4f} | "
+                f"{e['delta_centred_centre_only']:+.4f} | "
+                f"{e['interaction_residual']:+.4f} | "
+                f"{e['delta_uncentred_production']:+.4f} |")
+
+    for epoch, key in ((1, "summary_epoch1"), (3, "summary_epoch3")):
+        L.append(f"\n### Mean over the four forget identities, epoch {epoch}"
+                 f" — descriptive summary, not replicates\n")
+        L.append("| K | head | n | w angle | c angle | (w-c) angle | dProd | "
+                 "dWeightOnly | dCentreOnly | resid | dUncentred |")
+        L.append("|---|---|---|---|---|---|---|---|---|---|---|")
+        for r in out[key]:
+            L.append(
+                f"| {r['K']} | {r['head']} | {r['n_cells']} | "
+                f"{r['forget_weight_angle_deg']:.3f}° | "
+                f"{r['retain_centre_angle_deg']:.3f}° | "
+                f"{r['centred_weight_angle_deg']:.3f}° | "
+                f"{r['delta_centred_production']:+.4f} | "
+                f"{r['delta_centred_weight_only']:+.4f} | "
+                f"{r['delta_centred_centre_only']:+.4f} | "
+                f"{r['interaction_residual']:+.4f} | "
+                f"{r['delta_uncentred_production']:+.4f} |")
+
+    L.append("\n### Difference-in-changes, ArcFace minus CE — our arithmetic\n")
+    L.append("| convention | ep | " + " | ".join(
+        f"K={K}" for K in sorted({c['K'] for c in cells})) + " |")
+    L.append("|---|---|" + "---|" * len({c["K"] for c in cells}))
+    Ks = sorted({c["K"] for c in cells})
+    for label, field in (("centred, production", "delta_centred_production"),
+                         ("centred, fixed epoch-0 centre",
+                          "delta_centred_weight_only"),
+                         ("centred, fixed epoch-0 weight",
+                          "delta_centred_centre_only"),
+                         ("interaction residual", "interaction_residual"),
+                         ("uncentred", "delta_uncentred_production")):
+        for epoch, key in ((1, "summary_epoch1"), (3, "summary_epoch3")):
+            vals = []
+            for K in Ks:
+                by = {r["head"]: r for r in out[key] if r["K"] == K}
+                vals.append(f"{by['arcface'][field] - by['ce'][field]:+.4f}")
+            L.append(f"| {label} | {epoch} | " + " | ".join(vals) + " |")
+    return "\n".join(L) + "\n"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--replay-root", required=True)
     ap.add_argument("--canonical-root", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--markdown", default=None,
+                    help="also render the tables to this path")
     a = ap.parse_args()
 
     replay_root, canon_root = Path(a.replay_root), Path(a.canonical_root)
@@ -298,6 +371,10 @@ def main() -> None:
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(out, indent=2))
     print(f"\n{len(cells)} cells gated and decomposed -> {a.out}")
+    if a.markdown:
+        md = render_markdown(out)
+        Path(a.markdown).write_text(md)
+        print(md)
 
 
 if __name__ == "__main__":
