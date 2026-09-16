@@ -194,9 +194,15 @@ def evaluate_light(backbone: nn.Module, head: nn.Module,
         "nc1_angular": M.nc1_angular(f_tr, y_tr, num_classes),
     }
     if include_uncentred:
-        # centre=False, so exclude_from_centre is meaningless here and is not
-        # passed: there is no global mean being subtracted to contaminate.
-        nc3_u = M.nc3_alignment(f_tr, y_tr, W, num_classes, centre=False)
+        # `exclude_from_centre` does DOUBLE DUTY in nc3_alignment: it drops the
+        # class from the centring reference (only when centre=True), and it is
+        # also what names the class reported as "forget" (always). So it must
+        # be passed here even though nothing is being centred -- omitting it
+        # returns a dict with no "forget" key and the column silently fills
+        # with nan. With centre=False the centring branch is skipped entirely,
+        # so passing it cannot reintroduce centring contamination.
+        nc3_u = M.nc3_alignment(f_tr, y_tr, W, num_classes, centre=False,
+                                exclude_from_centre=forget_class)
         point["nc3_uncentred_forget"] = nc3_u.get("forget", float("nan"))
     return point
 

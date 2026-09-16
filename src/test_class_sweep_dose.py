@@ -332,10 +332,42 @@ def test_evaluate_light_default_shape_is_unchanged():
     src = inspect.getsource(TR.evaluate_light)
     check("uncentred branch is guarded by the flag",
           "if include_uncentred:" in src)
-    check("uncentred call does not pass exclude_from_centre",
-          "centre=False)" in src)
     check("default key set documented above matches the literal",
           all(k in src for k in keys_default))
+
+
+def test_uncentred_forget_is_finite_not_nan():
+    """The uncentred column must carry a real cosine, not nan.
+
+    `nc3_alignment` uses `exclude_from_centre` for TWO things: which class to
+    leave out of the centring reference, and which class to report as
+    "forget". Only the first is conditional on `centre`. Calling it with
+    centre=False and no `exclude_from_centre` therefore returns a dict with no
+    "forget" key at all, and the column fills with nan while every structural
+    check still passes. That happened once; this test is why it cannot happen
+    again silently.
+    """
+    import numpy as np
+    import metrics as M
+    rng = np.random.default_rng(0)
+    n_classes, dim = 4, 5
+    y = np.repeat(np.arange(n_classes), 8)
+    f = rng.normal(size=(len(y), dim))
+    W = rng.normal(size=(n_classes, dim))
+
+    without = M.nc3_alignment(f, y, W, n_classes, centre=False)
+    check("reproduces the defect: no forget key without exclude_from_centre",
+          "forget" not in without)
+
+    withfc = M.nc3_alignment(f, y, W, n_classes, centre=False,
+                             exclude_from_centre=1)
+    check("uncentred forget present when the class is named",
+          "forget" in withfc and np.isfinite(withfc["forget"]))
+
+    # and the guard that matters for real trajectories
+    src = __import__("inspect").getsource(TR.evaluate_light)
+    check("evaluate_light names the forget class in the uncentred call",
+          "centre=False,\n                                exclude_from_centre=forget_class)" in src)
 
 
 def main():
@@ -346,7 +378,8 @@ def main():
                test_dose_propagates_and_predicted_equals_observed,
                test_candidate_trace_is_dose_invariant_but_dose_trace_is_not,
                test_provenance_block_is_recorded,
-               test_evaluate_light_default_shape_is_unchanged):
+               test_evaluate_light_default_shape_is_unchanged,
+               test_uncentred_forget_is_finite_not_nan):
         print(f"\n{fn.__name__}")
         fn()
     print()
