@@ -1,0 +1,227 @@
+{
+  "experiment": "K=100 seed-1 robustness replication of the CE-vs-ArcFace classifier-only random-label unlearning comparison",
+  "execution_revision": {
+    "seed1_runs": "056b522ffc3e167a5a34d62dc14088f8c7208723 (git_dirty=false)",
+    "seed0_runs": "51c38be2f9db9ac3f74b1fdb542b220c91730272 (git_dirty=False)"
+  },
+  "protocol": {
+    "method": "random_label, classifier_only (backbone frozen)",
+    "unlearn_epochs": 3,
+    "forget_active_steps_per_epoch": 9,
+    "forget_loss_weight": 1.0,
+    "per_cell_seed": true,
+    "split_mode": "all",
+    "n_forget": 40,
+    "forget_classes": [
+      0,
+      29,
+      60,
+      95
+    ],
+    "identity_map": {
+      "0": "00001",
+      "29": "00142",
+      "60": "00284",
+      "95": "00524"
+    },
+    "identity_roster_identical_across_seeds": true
+  },
+  "data_manifests": {
+    "seed0": {
+      "identity_manifest_sha256": "f1b43b10a0067c63a0db192d6ef89efad843fe4810738f067e528c933af87c8a",
+      "image_manifest_sha256": "3176469cd7ab18192afe426ef03f5e57e0d55d06d37d8ca14e31cb165c978897",
+      "train_split_sha256": "bb00eccc5b83ab736a529b9ab301757b70fb3ca264e550d1e808a6ae9997ee76",
+      "test_split_sha256": "130db2524cf9db9cfbd7ef58571fbc93e10ca14ab332406ec9e6b957d80ac87c",
+      "n_images_total": 4906,
+      "n_train": 3926,
+      "n_test": 980,
+      "num_classes": 100,
+      "max_identities": 100,
+      "min_images": 40,
+      "max_images_per_identity": 50,
+      "test_fraction": 0.2
+    },
+    "seed1": {
+      "identity_manifest_sha256": "f1b43b10a0067c63a0db192d6ef89efad843fe4810738f067e528c933af87c8a",
+      "image_manifest_sha256": "3176469cd7ab18192afe426ef03f5e57e0d55d06d37d8ca14e31cb165c978897",
+      "train_split_sha256": "90627643bfaf5607bab81b4a09c9aeacab95b64e4b9c76b02c0bc11a6c336465",
+      "test_split_sha256": "aab3815772f64af2906c6a3c370b658ec8a0b3f77b2f8eec52e8f0321bed772f",
+      "n_images_total": 4906,
+      "n_train": 3926,
+      "n_test": 980,
+      "num_classes": 100,
+      "max_identities": 100,
+      "min_images": 40,
+      "max_images_per_identity": 50,
+      "test_fraction": 0.2
+    }
+  },
+  "seed_contract_at_K100": {
+    "identity_roster": "identical across seeds",
+    "selected_image_pool": "identical across seeds (image_manifest_sha256 equal)",
+    "train_test_assignment": "differs",
+    "initialization": "differs",
+    "shuffling": "differs",
+    "larger_K_behaviour": "not audited; not asserted either way"
+  },
+  "baseline_checkpoints": {
+    "seed0_ce": {
+      "path": "logs_classcount/K100/faces_ce_seed0/ckpt.pt",
+      "sha256": "8e1678eb9828438ca4cde8f2104dc5074b52019aa71e24472fcb8d842212a92f",
+      "tracked": false,
+      "note": "ignored by .gitignore (runs/, logs_classcount/, *.pt); NOT preserved here"
+    },
+    "seed0_arcface": {
+      "path": "logs_classcount/K100/faces_arcface_seed0/ckpt.pt",
+      "sha256": "dbdced8b3b5eaecab1dd9535c8432622414efb4d42d3c2742fc1967e4c030a53",
+      "tracked": false,
+      "note": "ignored by .gitignore (runs/, logs_classcount/, *.pt); NOT preserved here"
+    },
+    "seed1_ce": {
+      "path": "runs/robustness/k100_seed1/20260917T151714Z_056b522/baseline/faces_ce_seed1/ckpt.pt",
+      "sha256": "81cca35a78f3bc98d03106d5d0b2b63a15e611ca7fee915d66e3f9adfc8caa65",
+      "tracked": false,
+      "note": "ignored by .gitignore (runs/, logs_classcount/, *.pt); NOT preserved here"
+    },
+    "seed1_arcface": {
+      "path": "runs/robustness/k100_seed1/20260917T151714Z_056b522/baseline/faces_arcface_seed1/ckpt.pt",
+      "sha256": "be65912e5ef6269c3e11fafcc191c64b12d5b17469a3ee58eed61b26a846bb3c",
+      "tracked": false,
+      "note": "ignored by .gitignore (runs/, logs_classcount/, *.pt); NOT preserved here"
+    }
+  },
+  "source_artifact_roots": {
+    "seed1": "runs/robustness/k100_seed1/20260917T151714Z_056b522  (git-ignored)",
+    "seed0": "logs_classcount/K100  (git-ignored)"
+  },
+  "preserved_file_links": [
+    {
+      "preserved": "trajectories/seed0/ce_fc0.jsonl",
+      "source": "logs_classcount/K100/unlearn/faces_ce_seed0_random_label_clfonly_fc0/trajectory.jsonl",
+      "sha256": "e4ceac17fb1085f23f688aed37666b0e95454e3845299e9390c1a3690209277d",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed0/ce_fc29.jsonl",
+      "source": "logs_classcount/K100/unlearn/faces_ce_seed0_random_label_clfonly_fc29/trajectory.jsonl",
+      "sha256": "70ef4d39f9f717a4148e8eb96133948008166c3eb233cc1c9dd77ba550cb75c5",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed0/ce_fc60.jsonl",
+      "source": "logs_classcount/K100/unlearn/faces_ce_seed0_random_label_clfonly_fc60/trajectory.jsonl",
+      "sha256": "c60df86ae45fb455b6790f8cd7c5846da2aa276656dce454bf968464dce9aab6",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed0/ce_fc95.jsonl",
+      "source": "logs_classcount/K100/unlearn/faces_ce_seed0_random_label_clfonly_fc95/trajectory.jsonl",
+      "sha256": "f28e435a5a299a4b5deb50dbdf535908d87812158a3fa2aa8dc8f939a091be1e",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed0/arcface_fc0.jsonl",
+      "source": "logs_classcount/K100/unlearn/faces_arcface_seed0_random_label_clfonly_fc0/trajectory.jsonl",
+      "sha256": "75a2a10df880eaa63f69ddea21fe6519663035b939cf19b56bfe01a9c3b3c8f7",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed0/arcface_fc29.jsonl",
+      "source": "logs_classcount/K100/unlearn/faces_arcface_seed0_random_label_clfonly_fc29/trajectory.jsonl",
+      "sha256": "4ce1e6df23c582afb9175c6a1a1c0d79ff43caecfded7ce1e226ca10a41665f8",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed0/arcface_fc60.jsonl",
+      "source": "logs_classcount/K100/unlearn/faces_arcface_seed0_random_label_clfonly_fc60/trajectory.jsonl",
+      "sha256": "cc6bfd54695ab3e0cf05ae6dc610d7449c1f440f47cd0a989b8f69bf4d0a2321",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed0/arcface_fc95.jsonl",
+      "source": "logs_classcount/K100/unlearn/faces_arcface_seed0_random_label_clfonly_fc95/trajectory.jsonl",
+      "sha256": "574414e34d66bfd414ddddb82ae1e48b1c3744374458982682b5f264eb2f60fd",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed1/ce_fc0.jsonl",
+      "source": "runs/robustness/k100_seed1/20260917T151714Z_056b522/unlearning/faces_ce_seed1_random_label_clfonly_fc0/trajectory.jsonl",
+      "sha256": "808d6cb8d8ba0a49e7e1350cbbe02c9b5cdc6cd473e933fe0ced9f7ef5a026d7",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed1/ce_fc29.jsonl",
+      "source": "runs/robustness/k100_seed1/20260917T151714Z_056b522/unlearning/faces_ce_seed1_random_label_clfonly_fc29/trajectory.jsonl",
+      "sha256": "2d0b8076f40e15d093406bb5b22556062bb3d3fe58f36e7d0feddb0e52b74ed2",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed1/ce_fc60.jsonl",
+      "source": "runs/robustness/k100_seed1/20260917T151714Z_056b522/unlearning/faces_ce_seed1_random_label_clfonly_fc60/trajectory.jsonl",
+      "sha256": "8ce9f39c786e46e16231c3ddf4eb6fef4977c74073db4a3463c51d01ad7b56cb",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed1/ce_fc95.jsonl",
+      "source": "runs/robustness/k100_seed1/20260917T151714Z_056b522/unlearning/faces_ce_seed1_random_label_clfonly_fc95/trajectory.jsonl",
+      "sha256": "9c44a2e19162f998c423fdeea012fb316b6888b65c8de0265146af5cdb65f406",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed1/arcface_fc0.jsonl",
+      "source": "runs/robustness/k100_seed1/20260917T151714Z_056b522/unlearning/faces_arcface_seed1_random_label_clfonly_fc0/trajectory.jsonl",
+      "sha256": "282e04fa42f112a124c3b8d3633c55bc7c9f29d5fc7bd9affd018caf76691800",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed1/arcface_fc29.jsonl",
+      "source": "runs/robustness/k100_seed1/20260917T151714Z_056b522/unlearning/faces_arcface_seed1_random_label_clfonly_fc29/trajectory.jsonl",
+      "sha256": "643117206df9b3ccfec5cf93a6725d0c61cc6d3dad4ea7b484c7ede29c3fa8c0",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed1/arcface_fc60.jsonl",
+      "source": "runs/robustness/k100_seed1/20260917T151714Z_056b522/unlearning/faces_arcface_seed1_random_label_clfonly_fc60/trajectory.jsonl",
+      "sha256": "5dac09d03b21b7f09b9a3b95d0f853883212d48ce1d9c121a9fd311b21e0e09d",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "trajectories/seed1/arcface_fc95.jsonl",
+      "source": "runs/robustness/k100_seed1/20260917T151714Z_056b522/unlearning/faces_arcface_seed1_random_label_clfonly_fc95/trajectory.jsonl",
+      "sha256": "e422961b0907cd6fd756bd366551031cbc7f15a25f8aa6bb523029f7d579a763",
+      "verbatim_copy": true
+    },
+    {
+      "preserved": "tables/baselines.csv",
+      "source": "derived from the trajectories above",
+      "sha256": "4331e78f2152cc9530936f4156ec84f65c535d24aba0925ae4fd3bd1999def56",
+      "verbatim_copy": false
+    },
+    {
+      "preserved": "tables/fixed_epoch_dic.csv",
+      "source": "derived from the trajectories above",
+      "sha256": "082c736c3675107f69c199f0b49ca84891677ade081a7f82b8ac41971dc9e96d",
+      "verbatim_copy": false
+    },
+    {
+      "preserved": "tables/matched_outcome_dic.csv",
+      "source": "derived from the trajectories above",
+      "sha256": "132c2512e27d425e805ac29d5ab6a01dd7dd50076a763297fe613ce67ec59287",
+      "verbatim_copy": false
+    },
+    {
+      "preserved": "tables/trajectories_both_seeds.csv",
+      "source": "derived from the trajectories above",
+      "sha256": "610e61e878d4ccf1f26861b352cfc1ec018a84e21db965e5cd91e14e4da8620d",
+      "verbatim_copy": false
+    }
+  ],
+  "excluded_deliberately": [
+    "model checkpoints (*.pt)",
+    "raw face images",
+    "dataset absolute path (redacted in configs)",
+    "verbose environment dumps",
+    "private agent instructions (CLAUDE.md, ignored)",
+    "internal planning/milestone notes"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "seed": 1,
+  "device": "auto",
+  "out_dir": "runs/robustness/k100_seed1/20260917T151714Z_056b522/unlearning",
+  "data": {
+    "name": "faces",
+    "root": "<REDACTED: local CASIA-WebFace folder path; identity see provenance.json manifest hashes>",
+    "batch_size": 128,
+    "num_workers": 4,
+    "image_size": 112,
+    "max_identities": 100,
+    "min_images": 40,
+    "max_images_per_identity": 50,
+    "test_fraction": 0.2
+  },
+  "backbone": {
+    "arch": "resnet18",
+    "small_input": false,
+    "feat_dim": 512,
+    "pretrained": false
+  },
+  "head": {
+    "name": "ce"
+  },
+  "train": {
+    "epochs": 40,
+    "lr": 0.1,
+    "weight_decay": 0.0005,
+    "optimizer": "sgd",
+    "scheduler": "cosine",
+    "warmup_epochs": 0
+  },
+  "unlearn": {
+    "enabled": true,
+    "forget_class": 0,
+    "split_mode": "all",
+    "forget_fraction": 0.5,
+    "methods": [
+      "finetune",
+      "neggrad_plus",
+      "random_label"
+    ],
+    "classifier_only_diagnostic": true,
+    "retrain_reference": true,
+    "epochs": 3,
+    "lr": 0.001,
+    "weight_decay": 0.0005,
+    "trajectory_every": 1
+  }
+}

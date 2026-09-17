@@ -1,0 +1,5 @@
+seed,head,test_accuracy,correct,total,epochs,selection,ckpt_sha256,ckpt_source,gap_pp,gate_2pp
+0,ce,0.576530612244898,565,980,40/40,"final epoch, no selection",8e1678eb9828438ca4cde8f2104dc5074b52019aa71e24472fcb8d842212a92f,logs_classcount/K100/faces_ce_seed0/ckpt.pt,0.20408163265306367,PASS
+0,arcface,0.5744897959183674,563,980,40/40,"final epoch, no selection",dbdced8b3b5eaecab1dd9535c8432622414efb4d42d3c2742fc1967e4c030a53,logs_classcount/K100/faces_arcface_seed0/ckpt.pt,0.20408163265306367,PASS
+1,ce,0.5591836734693878,548,980,40/40,"final epoch, no selection",81cca35a78f3bc98d03106d5d0b2b63a15e611ca7fee915d66e3f9adfc8caa65,runs/robustness/k100_seed1/20260917T151714Z_056b522/baseline/faces_ce_seed1/ckpt.pt,1.2244897959183598,PASS
+1,arcface,0.5714285714285714,560,980,40/40,"final epoch, no selection",be65912e5ef6269c3e11fafcc191c64b12d5b17469a3ee58eed61b26a846bb3c,runs/robustness/k100_seed1/20260917T151714Z_056b522/baseline/faces_arcface_seed1/ckpt.pt,1.2244897959183598,PASS

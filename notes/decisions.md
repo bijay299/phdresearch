@@ -3048,10 +3048,30 @@ qualifies its K-trend paragraph and strengthens its conclusion 2.
 ## 2026-09-17 — K=100 seed-1 replication: direction and magnitude replicate, cell-level detail does not
 
 **Decided:** Record the K=100 seed-1 replication as eight valid unlearning
-cells plus two baselines, gate passed. **The four-identity mean K=100 DiC
-recurs in direction and similar magnitude across two pipeline seeds, while
-identity-level contributions vary substantially.** Seed 0's one non-attaining
-cell does not recur.
+cells plus two baselines, gate passed. Conclusions, as corrected:
+
+1. **A positive mean fixed-epoch K=100 DiC recurs across two seeds** — centred
+   +0.0574/+0.0648/+0.0607 (seed 0) against +0.0595/+0.0708/+0.0686 (seed 1) at
+   epochs 1/2/3; uncentred agrees to within 0.011 at every epoch.
+2. **Identity-level contributions vary substantially** — fc29 contributes
+   +0.1382 at seed 0 but +0.0173 at seed 1 (centred, epoch 3), while fc95 moves
+   −0.0214 → +0.1276. The means agree far more closely than the identities.
+3. **Seed 1 fc29 has a negative centred DiC under its own-attainment
+   (matched-outcome) comparison, −0.007274, despite positive fixed-epoch
+   contrasts at all three epochs.** The two contrasts disagree in sign for this
+   cell; a summary must state which it means.
+4. **Four of the seven attained pairs have unequal exposure** (seed 0 fc0,
+   fc29; seed 1 fc0, fc29 — ArcFace +1 epoch each); three are equal. Seed 0
+   fc95 has no attained pair at all.
+5. **Direct actual-run backbone state equality remains unavailable** — the
+   cells saved no model state, so it cannot be established from any surviving
+   artifact.
+6. **The seed-0 reference-frame decomposition remains closed** — this entry
+   opens nothing there and the 2026-09-16 decomposition entry stands unchanged.
+
+Seed 0's one non-attaining cell does not recur.
+
+Lightweight tracked evidence: `evidence/k100_seed1/`.
 
 > **Audited and corrected 2026-09-17.** An evidence audit of this entry and of
 > the report under the output root corrected four things, all recorded below:
@@ -3156,10 +3176,49 @@ differing exposures are stated.
 **no attained-pair contrast is computed for it** and no epoch was substituted.
 That non-attainment does not recur — at seed 1 ArcFace fc95 attains at epoch 1.
 
-Geometry at each objective's own attainment epoch is in the report's section D.
-Because five of the seven attained pairs sit at different epochs, a difference
-of the two heads' Δ there is **not** a fixed-epoch DiC and confounds head with
-exposure; use the fixed-epoch table above for the head comparison.
+**Matched-outcome DiC** — `ΔArcFace` at ArcFace's own first-zero epoch minus
+`ΔCE` at CE's own first-zero epoch, from full-precision trajectories. Because
+**four of the seven** attained pairs sit at different epochs, this confounds
+head with exposure; the fixed-epoch table above is the head comparison. It is
+reported because the two contrasts do **not** always agree in sign.
+
+| seed | fc | CE ep | Arc ep | DiC centred | DiC uncentred |
+|---|---|---|---|---|---|
+| 0 | 0 | 1 | 2 | +0.093026 | +0.258486 |
+| 0 | 29 | 2 | 3 | +0.128843 | +0.302625 |
+| 0 | 60 | 1 | 1 | +0.018519 | +0.248986 |
+| 0 | 95 | 1 | **none** | **not computed** | **not computed** |
+| 1 | 0 | 1 | 2 | +0.064305 | +0.248214 |
+| 1 | 29 | 1 | 2 | **−0.007274** | +0.244957 |
+| 1 | 60 | 1 | 1 | +0.040584 | +0.243585 |
+| 1 | 95 | 1 | 1 | +0.096737 | +0.259220 |
+
+**Correction: seed 1 fc29 (identity 00142) has a NEGATIVE centred
+matched-outcome DiC, −0.007274**, while its fixed-epoch centred DiC is positive
+at all three epochs (+0.0271, +0.0246, +0.0173). An earlier version of this
+entry, written under the superseded common-epoch reading, implied all seed-1
+contrasts were positive. That holds for **fixed-epoch** contrasts only. This
+negative DiC is **not** an NC3 sign reversal — there are still zero of those.
+
+Sign counts, kept separate by contrast type:
+
+| contrast | conv | seed | n | pos | neg | zero |
+|---|---|---|---|---|---|---|
+| matched-outcome | centred | 0 | 3 | 3 | 0 | 0 |
+| matched-outcome | centred | 1 | 4 | 3 | **1** (fc29) | 0 |
+| matched-outcome | uncentred | 0 | 3 | 3 | 0 | 0 |
+| matched-outcome | uncentred | 1 | 4 | 4 | 0 | 0 |
+| fixed-epoch | centred | 0 | 12 | 10 | **2** (fc95 ×2 epochs) | 0 |
+| fixed-epoch | centred | 1 | 12 | 12 | 0 | 0 |
+| fixed-epoch | uncentred | 0 | 12 | 12 | 0 | 0 |
+| fixed-epoch | uncentred | 1 | 12 | 12 | 0 | 0 |
+
+**Cross-seed means of matched contrasts compare different identity sets** (seed
+0 has 3 attained, seed 1 has 4): centred +0.080129 (s0, n=3) vs +0.048588 (s1,
+n=4). Restricted to the **common attained set {0, 29, 60}**: +0.080129 vs
++0.032539. That set is **selected on attainment in both seeds** — it excludes
+exactly the identity whose ArcFace cell failed at seed 0 — so it is not an
+unbiased subset and is not a like-for-like seed contrast.
 
 No cell was already at zero at baseline (seed-1 baselines range 4/10 to 10/10).
 Matching is on **observed output accuracy only** — not exposure, not utility,
@@ -3217,27 +3276,56 @@ negligible cost. That is a driver change, not a protocol change.
 
 ### Compute
 
-Measured: 8 unlearning cells **436.9 s = 0.1214 GPU-h** (summed `method_s +
-eval_s`); 2 baselines **~90.1 s = ~0.0250 GPU-h** (41 s + 41 s logged epoch
-time at 1 s print resolution, plus 3.5 s / 4.5 s eval — coarse). Sum of
-measured components **527.0 s = 0.1464 GPU-h**. End-to-end wall clock on the
-single GPU **625 s = 10.4 min = 0.1737 GPU-h** (pre-launch provenance write
-11:17:25 to last cell log 11:27:51); the ~98 s excess over the component sum is
-startup, CPU dataset scans and inter-run gaps, not separately instrumented. An
-earlier completion report said "well under 0.1 GPU-hours" — that was wrong in
-both directions of rounding and is withdrawn.
+Three quantities of different provenance, not to be merged:
+
+1. **Logged method + evaluation duration, 8 cells: 436.9 s = 0.1214 GPU-h** —
+   directly measured in-process (`method_s + eval_s` per `result.json`).
+2. **Coarsely logged baseline duration, 2 baselines: ≈90.1 s ≈ 0.0250 GPU-h** —
+   41 s + 41 s of per-epoch times printed at **1 s resolution** over 40 epochs
+   each (±40 s quantization possible), plus 3.5 s / 4.5 s eval.
+   Sum of (1)+(2): **≈527 s ≈ 0.146 GPU-h**, inheriting (2)'s coarseness.
+3. **Approximate end-to-end single-device execution interval: ≈626 s ≈ 10.4 min
+   ≈ 0.174 h** — **file-mtime-derived and approximate** (`environment.txt`
+   11:17:25 to last cell `run.log` 11:27:51).
+
+**(3) is not GPU-active time.** It is the wall-clock span of the sequential
+session and includes startup, CPU dataset scans, model construction, checkpoint
+I/O and inter-run gaps; the ≈99 s by which it exceeds (1)+(2) is inferred from
+the difference, not instrumented. The GPU was also not exclusively held —
+another user's job ran on GPU 0 throughout — so even (1) is elapsed in-process
+time on a shared machine. An earlier completion report said "well under 0.1
+GPU-hours"; that was wrong and is withdrawn.
 
 ### Artifact persistence
 
-Everything under the output root is **git-ignored** (`runs/`, plus `*.pt`):
-report, the three analysis CSVs, `results.json`, the provenance manifest,
-commands and environment records, both baseline checkpoints, and all per-cell
-logs and trajectories. The **tracked** record is this entry plus
-`configs/facesK100_*.yaml` and the `src/`+`scripts/` code, which together pin
-execution revision `056b522`, the artifact location, the configuration, the
-gate decision and the key results. **No durable or off-machine storage is known
-to exist** for the artifact tree — it lives only on this machine's local
-filesystem, and no backup was created.
+Everything under the output root stays **git-ignored** (`runs/`, plus `*.pt`):
+full report, run logs, per-cell `result.json` dose records, and both baseline
+checkpoints. Private agent instructions (`CLAUDE.md`), internal planning notes
+and checkpoints remain ignored and were **not** restored.
+
+**Lightweight scientific evidence is now tracked** at `evidence/k100_seed1/` —
+a dedicated directory outside the ignored `runs/` tree, so no ignore rule was
+weakened. It holds: a README (metric definitions, matched-outcome selection
+rule, limitations, relation to the ignored raw tree); `provenance.json`
+(execution revisions, identity/image/train/test manifest hashes for both seeds,
+baseline checkpoint SHA-256s, source-artifact paths, and a SHA-256 link for
+every preserved file); **verbatim, unaltered** copies of all 16 per-cell
+`trajectory.jsonl` files for both seeds, byte-identity verified; four corrected
+result tables; and the two resolved configs with the dataset's absolute path
+redacted. Excluded by design: checkpoints, raw images, verbose environment
+dumps, personal machine paths, credentials, internal management documents.
+
+**Preserving tables does not preserve rerun capability.** These files let the
+reported numbers be *checked*; reproducing the runs needs the dataset and
+pipeline, and reproducing the exact values bit-for-bit additionally needs the
+baseline checkpoints, which are not stored there.
+
+**Checkpoint backup remains unresolved.** The seed-1 baseline checkpoints
+(~45 MB each) and the seed-0 checkpoints exist only on the local filesystem of
+the machine that produced them. **No durable, mirrored or off-machine copy has
+been verified to exist.** Their SHA-256s are recorded in
+`evidence/k100_seed1/provenance.json` so a future copy can be integrity-checked
+— a hash is not a backup.
 
 ### Explicitly not claimed
 
@@ -3256,7 +3344,7 @@ filesystem, and no backup was created.
 - **Integer counts**: forget accuracy is over 10 test images (0.1 granularity).
 - Per-identity `s1−s0` contrasts mix seed effect with shifted per-identity
   baseline difficulty; same person, different split.
-- **Attainment epochs are not comparable exposures** — five of the seven
+- **Attainment epochs are not comparable exposures** — four of the seven
   attained pairs reach 0/10 at different epochs.
 
 **Supersedes:** nothing. The 2026-09-16 sweep entry stands; this adds a second
