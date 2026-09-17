@@ -4,6 +4,7 @@ logs/
 logs100/
 logs_classcount/
 logs_classcount_decomposition/
+runs/
 *.pt
 *.pth
 *.npz
