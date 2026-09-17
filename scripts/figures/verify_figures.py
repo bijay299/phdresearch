@@ -18,11 +18,12 @@ import csv
 import json
 import math
 import statistics as st
+import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from figlib import FIGDIR, REPO, sha256  # noqa: E402
+from figlib import FIGDIR, REPO, WIDTH, sha256  # noqa: E402
 
 EV = REPO / "evidence"
 FAILURES: list[str] = []
@@ -48,6 +49,31 @@ def sidecar(fig_id: str) -> dict:
 # ---------------------------------------------------------------------------
 def verify_sidecar_hashes(fig_id: str) -> None:
     rec = sidecar(fig_id)
+    rev = rec["execution_revision"]
+
+    # The rendering revision and the delivery commit are different things: the
+    # outputs cannot be committed until after they exist, so the commit that
+    # contains them is a descendant of the one they were rendered at.
+    rendered = rev["rendered_at_commit"]
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO,
+                          capture_output=True, text=True).stdout.strip()
+    ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", rendered, head],
+        cwd=REPO, capture_output=True, text=True).returncode == 0
+    check(f"{fig_id}: rendered_at_commit is HEAD or an ancestor of it",
+          rendered == head or ancestor,
+          f"rendered at {rendered[:9]}, HEAD {head[:9]}"
+          + (" (delivery commit is a descendant)" if rendered != head else ""))
+    check(f"{fig_id}: render inputs were clean, excluding generated outputs "
+          f"under figures/",
+          rev["inputs_clean_excluding_generated_outputs_under_figures"],
+          str(rev["uncommitted_non_output_paths_at_render_time"]))
+    check(f"{fig_id}: rendered at the declared manuscript width",
+          rec["render_width_inches"] == WIDTH,
+          f"{rec['render_width_inches']} in")
+    check(f"{fig_id}: caption is stored with the figure",
+          isinstance(rec.get("caption"), str) and len(rec["caption"]) > 200,
+          f"{len(rec.get('caption', ''))} chars")
     bad = [
         s["path"] for s in rec["sources"]
         if sha256(REPO / s["path"]) != s["sha256"]
@@ -86,13 +112,13 @@ def verify_fig1() -> None:
         if int(r["epoch"]) > 0 and int(r["forget_correct"]) == 0:
             want.setdefault(key, int(r["epoch"]))
     want = {k: want.get(k) for k in rec["first_zero_epoch"]}
-    check("plotted first-0/10 epochs match the source",
+    check("attainment-strip epochs match the source",
           want == rec["first_zero_epoch"],
           f"{sum(v is not None for v in want.values())} attained of 16")
 
     # The single missing attainment.
-    check("exactly one cell has no attainment marker",
-          rec["unmarked"] == ["seed0/arcface_fc95"], str(rec["unmarked"]))
+    check("exactly one cell is marked as not attaining 0/10",
+          rec["not_attained"] == ["seed0/arcface_fc95"], str(rec["not_attained"]))
     tail = [r for r in rows if r["seed"] == "0" and r["head"] == "arcface"
             and r["forget_class"] == "95" and r["epoch"] == "3"]
     check("that cell ends at 1/10, not 0/10",
@@ -121,7 +147,7 @@ def verify_fig1() -> None:
                 base = float(cell[0]["nc3_centred"])
                 revs += sum(1 for r in cell[1:]
                             if base * float(r["nc3_centred"]) < 0)
-    check("ZERO centred sign reversals across all 16 K=100 cells", revs == 0,
+    check("no centred sign reversals across all 16 K=100 cells", revs == 0,
           f"{revs} found")
 
     # The uncentred panel is a within-head change, and the levels justify it.
@@ -189,7 +215,7 @@ def verify_fig2() -> None:
     check("epoch-1 centre-only DiC range is 0.000200–0.000413",
           close(min(ctr1), 0.000200, 5e-7) and close(max(ctr1), 0.000413, 5e-7),
           f"[{min(ctr1):.6f}, {max(ctr1):.6f}]")
-    check("epoch-3 centre-only DiC is a SEPARATE, larger range",
+    check("epoch-3 centre-only DiC is a separate, larger range",
           max(ctr3) > max(ctr1), f"epoch 3 max {max(ctr3):.6f}")
     for field, want in (("delta_centred_centre_only", 0.006460),
                         ("interaction_residual", 0.006797),
@@ -235,7 +261,7 @@ def verify_fig2() -> None:
           g["gap_pp"] > 2.00,
           f"CE {g['ce']*100:.4f} %, ArcFace {g['arcface']*100:.4f} %, "
           f"gap {g['gap_pp']:.4f} pp")
-    check("K=500 failed because ArcFace EXCEEDED CE",
+    check("K=500 failed because ArcFace exceeded CE",
           g["arcface"] > g["ce"])
     check("K=500 carries no unlearning cells in the inventory",
           not (REPO / "logs_classcount" / "K500" / "unlearn").exists())
@@ -258,11 +284,11 @@ def verify_fig3() -> None:
     matched = list(csv.DictReader(
         open(EV / "k100_seed1" / "tables" / "matched_outcome_dic.csv")))
     rec = sidecar("fig3_contrast_rules")["consumed"]
-    YLIM = (-0.040, 0.160)
+    YLIM = (-0.042, 0.192)
 
     check("7 attained pairs plotted in panel B",
           rec["n_attained_pairs"] == 7, str(rec["n_attained_pairs"]))
-    check("4 of the 7 attained pairs have UNEQUAL exposure",
+    check("4 of the 7 attained pairs have unequal exposure",
           rec["n_unequal_exposure"] == 4, str(rec["n_unequal_exposure"]))
     check("the one absent observation is seed 0 / identity 00524",
           rec["no_pair"] == ["seed0/00524"], str(rec["no_pair"]))
@@ -280,7 +306,7 @@ def verify_fig3() -> None:
     # The sign disagreement, at full precision.
     neg = [r for r in matched if r["attained_pair"] == "True"
            and float(r["matched_dic_centred"]) < 0]
-    check("exactly ONE negative own-attainment centred contrast",
+    check("exactly one negative own-attainment centred contrast",
           len(neg) == 1, str([(r["seed"], r["identity"]) for r in neg]))
     check("it is seed 1, identity 00142, at -0.00727364360827909",
           neg[0]["seed"] == "1" and neg[0]["identity"] == "00142"
@@ -289,7 +315,7 @@ def verify_fig3() -> None:
     fe29 = [float(r["dic"]) for r in sorted(
         (r for r in fixed if r["seed"] == "1" and r["forget_class"] == "29"),
         key=lambda r: int(r["epoch"]))]
-    check("its fixed-epoch contrasts are POSITIVE at all three epochs",
+    check("its fixed-epoch contrasts are positive at all three epochs",
           all(v > 0 for v in fe29), " / ".join(f"{v:+.4f}" for v in fe29))
     check("the highlighted values in the figure match those",
           all(close(a, b) for a, b in zip(fe29, rec["highlight"]["fixed_epoch"])))
@@ -337,12 +363,40 @@ def verify_figS1() -> None:
 
 
 # ---------------------------------------------------------------------------
+def verify_captions_match_specs() -> None:
+    """The caption is the figure's prose. It lives in two places -- the sidecar
+    and notes/figure_specs.md -- so check they are the same text."""
+    print("\nCaptions")
+    # The document wraps the caption and prefixes each line with "> ", so
+    # compare on whitespace-normalised text rather than byte-for-byte.
+    raw = (REPO / "notes" / "figure_specs.md").read_text()
+    spec = " ".join(raw.replace("\n> ", " ").replace("\n", " ").split())
+    for fid in ("fig1_k100_trajectories", "fig2_seed0_decomposition",
+                "fig3_contrast_rules", "figS1_reversal_by_stratum"):
+        cap = " ".join(sidecar(fid)["caption"].split())
+        ok = cap in spec
+        check(f"{fid}: caption in notes/figure_specs.md matches the sidecar",
+              ok, "" if ok else "not found in the specs document")
+
+
+def pdf_width_inches(path: Path) -> float:
+    """First /MediaBox in the PDF, in inches (72 pt per inch)."""
+    blob = path.read_bytes()
+    i = blob.index(b"/MediaBox")
+    nums = blob[i:i + 80].split(b"[")[1].split(b"]")[0].split()
+    return (float(nums[2]) - float(nums[0])) / 72.0
+
+
 def main() -> int:
     print("Verifying rendered figures against their sources (read-only).")
     for fid in ("fig1_k100_trajectories", "fig2_seed0_decomposition",
                 "fig3_contrast_rules", "figS1_reversal_by_stratum"):
-        print(f"\nProvenance — {fid}")
+        print(f"\nProvenance and layout — {fid}")
         verify_sidecar_hashes(fid)
+        w = pdf_width_inches(FIGDIR / f"{fid}.pdf")
+        check(f"{fid}: vector PDF page is the manuscript width",
+              abs(w - WIDTH) < 0.02, f"{w:.3f} in")
+    verify_captions_match_specs()
     verify_fig1()
     verify_fig2()
     verify_fig3()

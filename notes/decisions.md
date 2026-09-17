@@ -3435,6 +3435,79 @@ specification-only and are now marked as implemented, with final captions.
 
 ---
 
+## 2026-09-17 — Figures revised for manuscript readability (CPU only)
+
+**Decided:** Re-lay all four figures for a full manuscript width of 7.0 inches
+with a type floor of about 8 pt, and move explanatory prose out of the images
+into captions. No numerical input, provenance record or experimental result
+changed; `verify_figures.py` re-checks every plotted value against the same
+sources and all checks pass.
+
+**Because:** the previous set was laid out at 9.4-12.0 inches wide with 6-7 pt
+annotation. Placed at 7 inches in a manuscript that becomes roughly 4-5 pt, and
+the figures also carried paragraph-length caveats that belong in a caption.
+
+**What changed, per figure:**
+
+- **All.** Rendered at exactly 7.0 in; `figlib.save()` asserts the width, and
+  `savefig` no longer uses a tight bounding box, which used to resize the canvas
+  around spilled text and so quietly changed the effective type size. Long
+  explanatory paragraphs and research-management warnings moved to captions;
+  axis definitions, legends, missing-outcome labels and seed/epoch information
+  stayed in the frame. Emphatic capitalisation removed throughout. Individual
+  observations and descriptive means both preserved; still no inferential band
+  anywhere.
+- **Figure 1.** Seed labels moved to a left-hand gutter, outside every plotting
+  region. The nested attainment rings, which collided whenever several cells
+  reached 0/10 at the same epoch, are replaced by a per-seed identity x
+  objective strip giving the first recorded zero epoch, with non-attainment
+  marked "none". The broad shaded epoch-1 band became a thin dashed rule, since
+  the band sat on top of the epoch-1 observations. The redundant 0.0-1.0
+  fraction axis was removed; the count out of 10 already carries the quantity.
+- **Figure 2.** The feature-centre-ratio inset now shows points with no
+  connecting line. K = 500's exclusion is marked identically in panels A, B, C
+  and the inset, with no invented value. Centre-only and residual values stay
+  legible in an in-panel block with the 1e-3 scale stated, while the bars remain
+  to scale. The gate record and the geometric caveats moved to the caption.
+  Epochs, per-identity points and descriptive means remain distinguished.
+- **Figure 3.** Panel subtitles are now "Same epoch; matched active forget
+  dose." and "Each objective at its first observed zero."; the matched-dose rule
+  is no longer described as equal optimization. The CE/ArcFace epoch-pair
+  annotations are kept. The paragraph-length annotation and the sweeping
+  cross-panel arc are replaced by a short label on the seed-1 identity-00142
+  point in each panel. The missing-pair annotation stays in a gutter axis
+  outside the numerical data region, and panel B still carries no means.
+- **Figure S1.** Short stratum labels in the plot; the protocol differences moved
+  to a compact table beneath the chart, which is drawn in its own subfigure so it
+  is not narrowed to the chart's axes box. The displayed fraction is defined on
+  the axis as reversed at any recorded epoch over total cells, and epoch-1
+  reversals remain a separate segment from those first appearing at epoch 2 or 3.
+  The statement that strata are never pooled is retained.
+
+**Provenance.** The sidecar now records `render_width_inches`, the caption
+verbatim, and an `execution_revision` block that distinguishes
+`rendered_at_commit` from the delivery commit: the commit containing the
+rendered files is necessarily a descendant of the one they were rendered at,
+because the outputs cannot be committed until after they exist.
+`verify_figures.py` checks that HEAD is `rendered_at_commit` or a descendant.
+The clean-status flag is now named
+`inputs_clean_excluding_generated_outputs_under_figures`, which says what it
+actually measures: whether the plotting scripts and input tables were committed,
+excluding everything under `figures/` that rendering itself writes.
+
+**Verification.** 90 read-only checks, all passing, including four new ones per
+figure: the rendering revision is HEAD or an ancestor, the render inputs were
+clean under the stated exclusion, the vector PDF page really is 7 inches wide,
+and the caption stored with the figure matches `notes/figure_specs.md` verbatim.
+
+**Not done:** no training, inference, replay or GPU work; no change to any
+recorded value; no new seeds or K values; checkpoint backup remains unresolved.
+
+**Supersedes:** the layout described in the 2026-09-17 figure-implementation
+entry. The scientific corrections recorded there stand unchanged.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO

@@ -19,6 +19,19 @@ git-ignored artifact trees (Figure 2 reads `logs_classcount_decomposition/`)
 therefore still carry a checkable SHA-256 of a source that is not itself in the
 repository -- that is the whole point of the sidecar.
 
+TARGET SIZE
+-----------
+Figures are laid out for a full manuscript column width of about 7 inches and
+are rendered at that width, so the type sizes below are the sizes a reader
+actually gets -- nothing is scaled down on placement. The floor is ~8 pt, with
+7.5 pt reserved for dense in-panel annotation.
+
+Long explanatory prose, caveats and research-management warnings belong in the
+CAPTION, not in the image. `notes/figure_specs.md` holds the final caption for
+each figure, and `write_provenance()` copies it into the sidecar so the caption
+travels with the figure. What stays inside the frame: axis definitions, units,
+legends, missing-outcome labels, and seed/epoch information.
+
 WHAT THIS MODULE DELIBERATELY DOES NOT PROVIDE
 ----------------------------------------------
 No error-bar, confidence-band or shaded-interval helper. The identities within
@@ -32,7 +45,6 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,6 +55,10 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 FIGDIR = REPO / "figures"
+
+# Full manuscript width. Every figure is rendered at this width so that the
+# point sizes in `apply_style` are the sizes the reader sees.
+WIDTH = 7.0
 
 # ---------------------------------------------------------------------------
 # Colour and marker conventions
@@ -63,7 +79,9 @@ IDENTITY_COLOUR = {0: "#0072B2", 29: "#009E73", 60: "#CC79A7", 95: "#E69F00"}
 SEED_FILLED = {0: True, 1: False}
 
 ZERO_LINE = dict(color="0.35", linewidth=0.8, zorder=1)
-ANCHOR_RULE = dict(color="0.72", linewidth=6.0, alpha=0.30, zorder=0)
+# A thin rule, not a broad band: the band used previously sat on top of the
+# observations at epoch 1, which is exactly where the data matter most.
+ANCHOR_RULE = dict(color="0.55", linewidth=0.8, linestyle=(0, (4, 3)), zorder=1)
 
 
 def apply_style() -> None:
@@ -71,13 +89,13 @@ def apply_style() -> None:
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "font.size": 8.0,
-            "axes.titlesize": 8.5,
-            "axes.labelsize": 8.0,
-            "xtick.labelsize": 7.5,
-            "ytick.labelsize": 7.5,
-            "legend.fontsize": 7.0,
-            "legend.title_fontsize": 7.5,
+            "font.size": 8.5,
+            "axes.titlesize": 9.0,
+            "axes.labelsize": 8.5,
+            "xtick.labelsize": 8.0,
+            "ytick.labelsize": 8.0,
+            "legend.fontsize": 8.0,
+            "legend.title_fontsize": 8.0,
             "axes.linewidth": 0.7,
             "xtick.major.width": 0.7,
             "ytick.major.width": 0.7,
@@ -89,8 +107,13 @@ def apply_style() -> None:
             "axes.axisbelow": True,
             "figure.dpi": 130,
             "savefig.dpi": 300,
-            "savefig.bbox": "tight",
-            "savefig.pad_inches": 0.03,
+            # NOT "tight": a tight bbox resizes the canvas to whatever text
+            # spills outside the axes, so the rendered width stops being the
+            # width the type sizes were chosen for. Constrained layout keeps
+            # everything inside the declared figure size instead, and figure
+            # legends use loc="outside ..." so they get reserved space.
+            "savefig.bbox": None,
+            "savefig.pad_inches": 0.0,
             "pdf.fonttype": 42,  # embed as TrueType, not Type 3
             "ps.fonttype": 42,
         }
@@ -126,23 +149,6 @@ def descriptive_mean_marker(ax, x, y, colour, label=None, **kw):
 # ---------------------------------------------------------------------------
 # Provenance
 # ---------------------------------------------------------------------------
-def footnote(fig, paragraphs, y=-0.11, width=134, fontsize=6.4):
-    """Figure-level notes, hard-wrapped.
-
-    `savefig(bbox_inches="tight")` grows the canvas to fit whatever text is
-    placed outside the axes, so an unwrapped paragraph silently widens the
-    figure and squashes the panels. Wrapping is not cosmetic here.
-
-    Keep mathtext out of these: the wrapper breaks on spaces and would split a
-    `$...$` span across lines.
-    """
-    lines = []
-    for para in paragraphs:
-        lines.extend(textwrap.wrap(para, width=width) or [""])
-    fig.text(0.5, y, "\n".join(lines), ha="center", va="top",
-             fontsize=fontsize, color="0.20", linespacing=1.55)
-
-
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -152,12 +158,24 @@ def sha256(path: Path) -> str:
 
 
 def git_revision() -> dict:
-    """The revision the figure was rendered at.
+    """The revision the figure was rendered at, and what "clean" means here.
 
-    `dirty` deliberately ignores anything under `figures/`: rendering writes
-    there, so including it would make the flag unconditionally true and
-    therefore useless. What matters for reproducibility is whether the scripts
-    and the input tables were clean, which is what this reports.
+    Two different commits matter and must not be conflated:
+
+    * `rendered_at_commit` -- the revision of the plotting scripts and input
+      tables that produced this image.
+    * the **delivery commit** -- the commit that actually contains the rendered
+      files. It is necessarily a *later* commit than `rendered_at_commit`,
+      because the outputs cannot be committed until after they exist. It is not
+      recorded here; it is the commit in which this sidecar first appears, and
+      `verify_figures.py` checks that HEAD is `rendered_at_commit` or a
+      descendant of it.
+
+    The clean-status flag is deliberately partial and is named to say so: it
+    excludes generated outputs under `figures/`, because rendering writes there
+    and counting them would make the flag unconditionally dirty. It reports
+    whether the *inputs to rendering* -- scripts, tables, evidence -- were
+    committed.
     """
     def run(*args):
         return subprocess.run(
@@ -173,9 +191,15 @@ def git_revision() -> dict:
         if path and not path.startswith("figures/")
     ]
     return {
-        "commit": run("git", "rev-parse", "HEAD"),
-        "dirty_excluding_figure_outputs": bool(pending),
-        "pending_paths": sorted(pending)[:20],
+        "rendered_at_commit": run("git", "rev-parse", "HEAD"),
+        "inputs_clean_excluding_generated_outputs_under_figures": not pending,
+        "uncommitted_non_output_paths_at_render_time": sorted(pending)[:20],
+        "delivery_commit": (
+            "not recorded here: the commit containing these rendered files is a "
+            "descendant of rendered_at_commit, since the outputs cannot be "
+            "committed until after they exist. verify_figures.py checks that "
+            "HEAD is rendered_at_commit or a descendant."
+        ),
     }
 
 
@@ -185,13 +209,21 @@ def write_provenance(
     consumed: dict,
     command: str,
     outputs: list[Path],
+    caption: str,
     notes: list[str] | None = None,
 ) -> Path:
-    """Write the sidecar: what was read, with hashes, and what was consumed."""
+    """Write the sidecar: what was read, what was consumed, and the caption.
+
+    The caption is stored here as well as in `notes/figure_specs.md` so that the
+    prose a reader needs -- the caveats that were deliberately kept out of the
+    image -- cannot drift away from the image it belongs to.
+    """
     rec = {
         "figure_id": figure_id,
         "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "render_width_inches": WIDTH,
         "execution_revision": git_revision(),
+        "caption": caption,
         "plotting_command": command,
         "sources": [
             {
@@ -222,11 +254,18 @@ def _tracked(path: Path) -> bool:
 
 
 def save(fig, figure_id: str) -> list[Path]:
-    """Vector PDF for the paper, PNG preview for review."""
+    """Vector PDF for the paper, PNG preview for review.
+
+    Asserts the canvas is still the declared manuscript width, so a layout
+    change cannot silently shrink the effective type size.
+    """
     FIGDIR.mkdir(parents=True, exist_ok=True)
+    w, h = fig.get_size_inches()
+    assert abs(w - WIDTH) < 1e-6, f"{figure_id}: width {w:.3f}in, expected {WIDTH}in"
     pdf = FIGDIR / f"{figure_id}.pdf"
     png = FIGDIR / f"{figure_id}.png"
     fig.savefig(pdf)
     fig.savefig(png)
     plt.close(fig)
+    print(f"  {figure_id}: {w:.2f} x {h:.2f} in at manuscript size")
     return [pdf, png]
