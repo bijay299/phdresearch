@@ -3045,6 +3045,111 @@ qualifies its K-trend paragraph and strengthens its conclusion 2.
 
 ---
 
+## 2026-09-17 — K=100 seed-1 replication: direction and magnitude replicate, cell-level detail does not
+
+**Decided:** Record the K=100 seed-1 replication as eight valid unlearning
+cells plus two baselines, gate passed. The centred and uncentred
+difference-in-changes patterns from seed 0 **recur**; the per-cell pattern does
+not line up cell-by-cell, and seed 0's one unmatched cell does not recur.
+
+**Because:** the 2026-09-16 sweep rests on one seed. If the CE-versus-ArcFace
+difference is a property of the loss it should survive a change of seed.
+
+Full report and machine-readable tables:
+`runs/robustness/k100_seed1/20260917T151714Z_056b522/` (untracked, like every
+artifact tree here). Commit `056b522`, clean tree, GPU 1, all ten runs on one
+physical device so no head comparison carries a device difference.
+
+### Seed contract at K=100 — a nuance worth pinning
+
+This is an end-to-end new-seed replication, **not** initialization-only. But at
+K=100 the identity roster **and** the image manifest are byte-identical across
+seeds 0 and 1 (`identity_manifest_sha256 f1b43b10…`, `image_manifest_sha256
+3176469c…`): identity selection is deterministic, and no identity in the
+first-100 roster exceeds the `max_images_per_identity=50` cap, so the sampling
+RNG is a no-op at this K. The **train/test split does change** (`bb00eccc…` →
+`90627643…`, `130db252…` → `aab38157…`), as do init and shuffling. Split, init
+and shuffling move; image selection is inert. Do not describe it either way
+without that qualification — and do not assume it still holds at K=250/500/1000,
+where identities above the cap almost certainly exist.
+
+### Baselines and the gate
+
+| seed | CE | ArcFace | gap (pp) | gate (2.00pp) |
+|---|---|---|---|---|
+| 0 | 57.6531 (565/980) | 57.4490 (563/980) | 0.2041 | pass |
+| 1 | 55.9184 (548/980) | 57.1429 (560/980) | 1.2245 | pass |
+
+Metric is `output_overall` over all 980 test images; checkpoint rule is final
+epoch, no selection. Neither head was retuned and no training extended.
+
+**Aggregate parity is not per-identity parity.** Baseline forget accuracy at
+label 95 moves from 6–7/10 at seed 0 to **10/10 in both heads** at seed 1. No
+post hoc eligibility gate was added on that basis.
+
+### Fixed-epoch DiC = dArcFace − dCE
+
+Sign convention established from raw values: recomputing seed 0 under this
+formula reproduces the 2026-09-16 table exactly. "CE–ArcFace difference" in the
+supplied summary is a loose label, not a sign inversion.
+
+| convention | ep | seed 0 mean (range, sign) | seed 1 mean (range, sign) |
+|---|---|---|---|
+| centred | 1 | +0.0574 ([+0.019,+0.097], 4/4) | +0.0595 ([+0.027,+0.097], 4/4) |
+| centred | 2 | +0.0648 ([−0.002,+0.127], 3/4) | +0.0708 ([+0.025,+0.123], 4/4) |
+| centred | 3 | +0.0607 ([−0.021,+0.138], 3/4) | +0.0686 ([+0.017,+0.128], 4/4) |
+| uncentred | 1 | +0.2599 (4/4) | +0.2533 (4/4) |
+| uncentred | 2 | +0.3166 (4/4) | +0.3075 (4/4) |
+| uncentred | 3 | +0.3284 (4/4) | +0.3174 (4/4) |
+
+Centred means agree to ~0.008; uncentred to ~0.011. **Seed 1 is 4/4 positive at
+every epoch where seed 0 had two negative cells (fc95, ep2 and ep3).** Per-label
+values do **not** track between seeds — fc29's centred DiC at ep3 is +0.1382
+(seed 0) against +0.0173 (seed 1), fc95 −0.0214 against +0.1276.
+
+### Matched outcome — first epoch with 0/10 correct forget predictions
+
+| fc | s0 CE | s0 Arc | s0 matched | s1 CE | s1 Arc | s1 matched |
+|---|---|---|---|---|---|---|
+| 0 | 1 | 2 | 2 | 1 | 2 | 2 |
+| 29 | 2 | 3 | 3 | 1 | 2 | 2 |
+| 60 | 1 | 1 | 1 | 1 | 1 | 1 |
+| 95 | 1 | **never** | **none** | 1 | 1 | 1 |
+
+**Seed 0's one missing outcome does not recur**: at seed 1, ArcFace fc95 reaches
+0/10 at epoch 1. Seed 1 has 4/4 matched, and matched-epoch DiC is positive in
+4/4 (both conventions). No cell was already at zero at baseline. Matching is on
+**observed output accuracy only** — not exposure, utility, or representation.
+
+### Also holding at seed 1
+
+- **No sign reversal in any of the 8 cells, either convention.** Centred NC3
+  stays in [+0.633, +0.972]; ArcFace uncentred is already ≈ −0.89 at epoch 0,
+  the case the guard covers.
+- **Retain utility** within 0.82pp of each head's own epoch-0 baseline (CE
+  −0.82 to +0.10pp, ArcFace −0.31 to +0.31pp). No cell forgot by breaking.
+- **`nc1_angular` constant across all four epochs of every cell**, confirming
+  from canonical outputs that the frozen backbone's feature mapping never moved.
+  BN buffers are frozen too — `backbone.eval()` in `_params`, pinned by
+  `src/test_dose_schedule.py:511`.
+
+### Explicitly not claimed
+
+- **Two seeds are not population-level robustness.** No significance test.
+- **The eight cells are four identities × two objectives at one seed**, not
+  eight independent seed replications: within a seed they share one backbone per
+  head, one split, one baseline checkpoint.
+- **Positive DiC is not superior unlearning**, and zero output accuracy is not
+  erasure — the backbone is frozen, so features cannot move by construction.
+- **Integer counts**: forget accuracy is over 10 test images (0.1 granularity).
+- Per-label `s1−s0` contrasts mix seed effect with shifted per-identity
+  baseline difficulty; same person, different split.
+
+**Supersedes:** nothing. The 2026-09-16 sweep entry stands; this adds a second
+seed at K=100 only.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO
