@@ -102,8 +102,11 @@ tabulated in the 2026-09-16 decomposition entry in `notes/decisions.md`.
 **Layout.** Three panels in a row.
 
 **Panel A — forget-weight rotation.** x = K on a log scale with ticks at exactly
-100, 250, 1000 (K = 500 has **no** unlearning cells — it failed the fairness
-gate — so the axis must show a visible gap there, never a line through it).
+100, 250, 1000. **K = 500 carries no unlearning cells.** Draw its tick, leave
+its data region empty, and **break every connecting line at that position** —
+no segment may span K=250 to K=1000, because a line crossing the gap would read
+as an interpolated observation at K=500 where none exists. Points must not be
+joined across it in any panel.
 y = rotation from epoch 0, degrees, 0–25°. Two series (CE, ArcFace) at epoch 1,
 plus the same two at epoch 3 in a lighter weight. Plot the four identities as
 individual points with a short horizontal offset (jitter) per K; overlay the
@@ -122,9 +125,19 @@ allowed to go slightly negative. Label the third and fourth bars in-panel as
 "≈ 0". An inset or second y-axis may carry `|g_0| / |f_0|` for CE
 (0.80 / 0.73 / 0.69) as a line, since that is where the ordering enters.
 
-**Missing-outcome handling.** K = 500 appears on the x-axis as an explicit gap
-with the annotation "no unlearning cells — baseline fairness gate failed at
-2.36 pp". Do not omit the tick, and do not connect across it.
+**Missing-outcome handling — K = 500.** The tick appears; the data region is
+empty; **no line connects across it.** Annotate with the verified gate record
+read from `logs_classcount/K500/faces_{ce,arcface}_seed0/results.jsonl`:
+
+> K = 500 baselines: CE **68.9676 %**, ArcFace **71.3232 %**, absolute gap
+> **2.3556 pp**, exceeding the pre-registered 2.00 pp head-fairness gate. Its
+> unlearning cells were never run and neither head was retuned to rescue it.
+> Both baselines are retained as artifacts.
+
+State that the gate is **symmetric** and failed because ArcFace **exceeded** CE,
+not because ArcFace underperformed. Do not omit the tick, do not impute a value,
+and do not describe K=500 as "missing data" — it is a deliberate exclusion under
+a pre-registered rule.
 
 **Draft caption.** *Seed-0 reference-frame decomposition of centred NC3 over the
 24 controlled nested-sweep cells. (A) Forget-class weight rotation from epoch 0:
@@ -143,10 +156,13 @@ unlearning cells.*
 `A` is nonlinear in both arguments, so the four corners are an arithmetic
 decomposition of the **metric**, not an intervention on training, and the
 residual is a leftover rather than an interaction effect. That the ordering is
-established across seeds; it is one seed. That class count causes anything: K
-covaries with retain-set size, steps per epoch, active-step spacing, BatchNorm
-exposure and task difficulty. That three K points with per-cell overlap
-establish a trend.
+established across seeds; it is one seed. **That the sweep isolates K**: it is a
+controlled nested class-count comparison, and moving K also moves the head's
+output width, the training population (3,926 → 38,815 train images), retain
+steps per epoch (31 / 77 / 303), candidate forget exposure (1,240 / 3,080 /
+12,120 per epoch), BatchNorm exposure and task difficulty — only the *active*
+forget presentations (360/epoch) are held fixed. That three K points with
+per-cell overlap establish a trend. That any value exists at K = 500.
 
 ---
 

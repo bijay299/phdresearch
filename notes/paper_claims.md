@@ -72,17 +72,46 @@ reused elsewhere.
 | **F** | fc0 only, CIFAR + faces-1000 | four different doses | 0 | 5 | **repeated observations**, not independent cells |
 
 **Excluded as non-authoritative, with reasons:** 8 pre-LR-fix CIFAR ArcFace
-cells (superseded by strata E); 10 `unlearn_pass1_nan_uncentred` cells (nan
-defect fixed at `51c38be`); 25 `logs_classcount_decomposition/` cells — these
-are **bitwise-identical replays** of stratum A (verified equal on
-`output_forget`, `output_retain`, both NC3 conventions, `nc1_angular`,
-`probe_forget`), so they are repeated observations of the same runs and carry
-no additional evidential weight.
+cells (superseded by stratum E); 10 `unlearn_pass1_nan_uncentred` cells (nan
+defect fixed at `51c38be`); and **25 decomposition/replay artifacts**.
 
-**Independent seed replications exist in exactly two places:** CIFAR-10
-(seeds 0 and 1, both heads, 4 classes) and faces-nested K=100 (seeds 0 and 1,
-both heads, 4 identities). Everything else is seed 0 only. **Four identities
-within a seed are not four seeds** and are never counted as replications.
+#### The 25 replay artifacts map to 24 canonical stratum-A cells
+
+The extra artifact is the **gate cell**,
+`logs_classcount_decomposition/gate/K1000/unlearn/faces_arcface_seed0_random_label_clfonly_fc0`.
+It is a **second replay of one cell** — K=1000, ArcFace, identity 00001 — run
+first, on its own, to verify that instrumented replay reproduced the canonical
+run bitwise before the remaining cells were launched. So:
+
+    24 canonical stratum-A cells
+      → 24 instrumented replays in logs_classcount_decomposition/K{100,250,1000}/
+      + 1 gate-cell replay duplicating (K=1000, arcface, fc0)
+      = 25 replay artifacts
+
+All three copies of that cell — canonical, main replay, gate replay — were
+re-verified here as **bitwise equal** on `output_forget`, `output_retain`,
+`probe_forget`, both NC3 conventions and `nc1_angular`, with identical
+`training_trace_sha256` (`4ce51788…`) and `active_dose_trace_sha256`
+(`a6960f3e…`).
+
+**Confirmed: no aggregate count treats any of them as independent evidence.**
+Zero inventory rows take a `logs_classcount_decomposition/` path as their
+`source_artifact`; all 24 stratum-A rows source from `logs_classcount/`, and the
+decomposition tree appears only in the `reused_elsewhere` column as a
+cross-reference.
+
+#### Replication terminology
+
+The two seeds are **pipeline-seed replications on shared source data**, not
+independent datasets and not initialization-only replications. At K=100 the two
+seeds draw on the **same source directory, the same identity roster and the same
+selected image pool** (identical `identity_manifest_sha256` and
+`image_manifest_sha256`); what the seed changes is the **train/test assignment,
+the initialization and the shuffling**. They exist in exactly two places:
+CIFAR-10 (seeds 0 and 1, both objectives, 4 classes) and faces-nested K=100
+(seeds 0 and 1, both objectives, 4 identities). Everything else is seed 0 only.
+**Four identities within a seed are not four seeds** and are never counted as
+replications.
 
 #### Audit of the previously quoted "31 of 32"
 
@@ -157,13 +186,18 @@ simultaneously in domain, input resolution (32×32 vs 112×112), class count,
 scale *s*, images per identity, test-set resolution and dose protocol. Strata C
 and D differ from each other in source directory, `min_images`, images per
 identity **and** identity membership — only 31 of D's 100 identities appear in
-C's set. The only comparison in this project that moves **one** variable is
-stratum A's nested sweep across K, and it shows **no** reversals at any K.
+C's set. Stratum A's nested sweep is the **most controlled** comparison in the
+project — nested identity sets, shared class indices, one config key moving —
+but it is **not** an isolated causal intervention on K either (see C6c). It
+shows **no** reversals at any K.
 
 **Does not assert.** That reversal is or is not "a property of the loss" — that
 phrasing is withdrawn as unsupported. That class count causes the difference.
 That the settings are otherwise comparable enough to pool; **they are not, and
-a cross-setting reversal summary is supplementary context only.**
+a cross-setting reversal summary is supplementary context only.** CIFAR-10 is
+described here as a **contrasting, non-equivalent experimental setting**, not as
+an outlier requiring explanation — calling it an outlier would presuppose the
+settings lie on one comparable axis, which is exactly what is not established.
 
 ---
 
@@ -278,6 +312,33 @@ decomposition.** Centred DiC orders K=100 < 250 < 1000, but:
   ~1e-4. ArcFace's centre is nearly as long as the weight (0.96–1.01), so
   centring matters greatly to its *level*, but the centre barely moves
   (0.02–0.07°) and so contributes nothing to the *change*.
+
+**C6c — what the nested sweep does and does not control.** The sweep is a
+**controlled nested class-count comparison, not an isolated causal intervention
+on K.** Only `max_identities` and `out_dir` move in the config, identity sets
+are nested, and a shared identity keeps its class index — but changing K
+necessarily changes the training population and the classifier geometry too.
+Read from the cells' own provenance and dose records:
+
+| K | images | train | test | retain imgs | retain steps/epoch | candidate forget presentations/epoch | **active** forget presentations/epoch |
+|---|---|---|---|---|---|---|---|
+| 100 | 4,906 | 3,926 | 980 | 3,886 | 31 | 1,240 | **360** |
+| 250 | 12,218 | 9,774 | 2,444 | 9,734 | 77 | 3,080 | **360** |
+| 1000 | 48,519 | 38,815 | 9,704 | 38,775 | 303 | 12,120 | **360** |
+
+**Held fixed:** active forget presentations per epoch (360), active
+forget-bearing steps (9/epoch, 27 total), λ=1, 3 epochs, per-cell reseeding, the
+backbone, the schedule, and the four forget identities.
+
+**Not held fixed, and varying with K by construction:** the head's output width
+(100 / 250 / 1000, i.e. the classifier geometry itself), the training population
+(~10× more images from K=100 to K=1000), the number of retain optimisation steps
+per epoch (31 / 77 / 303) and hence the number of retain updates between
+consecutive forget steps and their spacing within an epoch, **candidate** forget
+exposure (1,240 / 3,080 / 12,120 per epoch), BatchNorm exposure, and the
+difficulty of the underlying classification problem. A K comparison therefore
+moves a bundle of correlated quantities, and no cell in this project separates
+them.
 
 **Does not assert.** That class count changes forget-class erasure. The
 ordering rests on **three** K points (K=500 absent — it failed the 2.00pp
@@ -487,13 +548,47 @@ State these as scope, not as apology. Each is blocked by a specific, named gap.
 | **Any representation-erasure claim** | Backbone frozen in every main cell; class means bit-identical across epochs. The probe metric measures post-hoc linear decodability after fitting on labelled forget-class examples, not erasure. |
 | **Class-count causality** | C6 rules out the obvious mechanism and identifies a measurement-geometry origin; K covaries with retain-set size, step counts, active-step spacing, BN exposure and task difficulty. K=500 is absent. |
 | **Inferential claims from the current design** | No statistical test is reported anywhere, and the tests a reader would reach for are **inappropriate for this design**, not merely unrun: treating the four identities as independent replicates is invalid (within a seed they share one backbone per head, one split, one baseline checkpoint), and two seeds give no usable variance estimate for a seed effect. Descriptive means, ranges and sign counts are reported instead. This is a statement about **what these data can support**, not that no test could ever be computed on any design — a properly powered study with independent seeds as the replication unit, and identities as a within-seed factor, would admit standard inference. |
-| **Forget-set generalisation (within-identity)** | A **held-out test split does exist and is used throughout** — `stratified_image_split` reserves ~20% of every identity's images, including the forget identity's, and all `output_forget` / `output_retain` / `probe_forget` numbers are measured on it. What is untested is a **different** form of generalisation: because `split_mode=all` throughout, every *training* image of the forget identity is handed to the unlearning method, so `forget-heldout` is 0 in every run. The untested question is whether forgetting **generalises to training images of the forget identity that the unlearner never saw** — the `split_mode=subset` experiment, never run. |
+| **Within-identity generalisation to unlearner-withheld *training* images** | See the dedicated note below — the test-split evaluation that *does* exist must not be confused with the `split_mode=subset` protocol that does not. |
 | **Any CosFace result** | Never run. The head exists in `src/heads.py` and in `configs/cifar_cosface.yaml`; no experiment used it. |
 | **faces-100 reproducibility from the repository alone** | The extraction seed for `casia-webface-folders-100id` was never recorded, and identity selection inside the converter is `rng.choice`-driven. That subset is not reconstructable from artifacts; it is a separate lineage from the nested sweep and must not be pooled with it. |
 | **Direct post-unlearning backbone state equality** | Cells save no model state; only starting baseline checkpoints exist. The frozen-backbone claim rests on the code path (`eval()` mode, gradients off, optimizer over head parameters only) plus a **toy-model** buffer test (`Linear + BatchNorm1d(5)`, untrained, CPU — not ResNet-18). Constant `nc1_angular` is *consistent with* an unchanged mapping but is **not proof**: a scalar summary is many-to-one. No rerun is authorized. |
 | **A novelty claim** | Two searches remain outstanding: **ACM DL**, and a **Semantic Scholar citation-graph pass** on the AISTATS paper and on *Neural Collapse by Design* (arXiv:2605.20302). Per project rule, no novelty claim may be written before both are done. |
 | **Face-recognition SOTA relevance** | Deliberately not pursued. Reviewers should be pointed at condition matching, not LFW accuracy. |
 | **"ArcFace fails to train"** | A tuning problem, resolved: s=64 was the wrong scale for 1000-way; s=96 with 5 warmup epochs closed the head-to-head gap to 1.94pp. Never reportable as a finding. |
+
+---
+
+### Note — two different generalisation questions, only one of which is untested
+
+These are routinely conflated and must be kept apart.
+
+**What the existing evaluation does provide.** `stratified_image_split` reserves
+a per-identity test fraction (0.2) **within every identity, including the forget
+identity**, and guarantees each identity contributes at least one image to each
+side. Those test images are **never trained on by anything**. At K=100 that is
+**10 held-out test images of the forgotten person per cell**; on faces-1000 it
+is likewise 10, and on the historical faces-100 lineage 25–31. Every
+`output_forget`, `output_retain` and `probe_forget` number in this project is
+measured there. So the project **does** carry a **limited assessment of
+within-identity generalisation to unseen images of the forgotten identity** —
+limited by the denominator (10 images is 0.1 granularity), by n=4 identities,
+and by the frozen backbone, but real, and it is the basis of every attainment
+claim in C1.
+
+**What is untested.** `make_forget_split(mode="subset")` partitions the forget
+identity's **training** images: a `forget_fraction` is handed to the unlearning
+method and **the remainder becomes `forget-heldout`** — images of the same
+person that **the original model did train on** but **the unlearner never
+sees**. Probing those answers a distinct question: *did the forgetting
+generalise within the identity, from the images the unlearner was given to
+images of the same person it was not given?* That partition is explicitly **not
+a test set** — the original model trained on it.
+
+Because every run in this project uses `split_mode=all`, the entire forget
+identity is handed to the unlearner and `forget-heldout` is empty. **That
+zero-sized internal partition means the subset-mode question was never asked; it
+does not negate or weaken the external test-split evaluation above.** The
+`split_mode=subset` experiment remains unrun.
 
 ---
 
@@ -570,7 +665,51 @@ These are for Dr Rawat, not for the execution agent, and they interlock.
 
 ---
 
-## Part V — Evidence index
+## Part V — Proposed paper outline and claim-to-figure mapping
+
+Provisional; the epoch-convention and scope decisions in Part IV can still
+change it.
+
+| § | section | carries | figures |
+|---|---|---|---|
+| 1 | Introduction | the AISTATS illusion result; the margin-loss hypothesis; the qualified negative outcome stated up front | — |
+| 2 | Background | neural collapse, NC1–NC3; ArcFace/CosFace angular margin; the predicted `w_k^un = −(1−γ)μ_k` flip | — |
+| 3 | Method and measurement | the one-variable-per-comparison design; **both NC3 conventions and why they disagree**; centring contamination and the `exclude_from_centre` fix; DiC and `probe_gap_to_retrain*` labelled as project arithmetic; the dose schedule (m, λ) and that dose counts are not gradient magnitudes | — |
+| 4 | Experimental settings | the four lineages and their non-equivalence; the head-fairness gate; **why K=500 is absent** | — |
+| 5 | **Result 1 — output forgetting** | C1, C8 | **Fig 1** |
+| 6 | **Result 2 — NC3 behaviour under a matched dose** | C5, C7, C3 | **Fig 3**, Fig 1 (centre column) |
+| 7 | **Result 3 — mechanism (seed 0)** | C6a, C6b, C6c, C9 | **Fig 2** |
+| 8 | What these metrics do not measure | C4, C10, the two-generalisation note | — |
+| 9 | Contrasting settings | C2, C11 — explicitly non-equivalent | **Fig S1** (supplementary) |
+| 10 | Limitations | Part II and Part III in full | — |
+| 11 | Conclusion | the central framing verbatim | — |
+
+**Claim → figure map** (claims with no figure are text-only by design):
+
+| claim | figure | notes |
+|---|---|---|
+| C0 inventory / stratification | — | table in §4, sourced from `evidence/run_inventory/` |
+| C1 ArcFace does not eliminate output forgetting | **Fig 1** (col 1) | stratified attainment table alongside |
+| C2 reversal frequency differs across settings | **Fig S1** | supplementary only; protocol comparability not demonstrated |
+| C3 reversal neither necessary nor sufficient | **Fig 1** (cols 1–2) | the "not sufficient" half needs CIFAR, so cite Fig S1 context |
+| C4 three quantities are distinct | — | §8 text |
+| C5 two-seed fixed-epoch recurrence | **Fig 3** (panel A) | |
+| C6a rotation and norm (seed 0) | **Fig 2** (panels A–B) | |
+| C6b reference-frame account of K ordering | **Fig 2** (panel C) | |
+| C6c what the sweep does not control | — | §4 and Fig 2 caption |
+| C7 seed-1 detail, fc29 sign disagreement | **Fig 3** (panels A vs B) | the figure's reason for existing |
+| C8 attainment epochs | **Fig 1** (col 1 markers) | |
+| C9 uncentred baseline offsets | — | §3 methods table; guard, not a result |
+| C10 probe gaps | — | §8 table |
+| C11 narrow mechanism controls | — | §9 text |
+| C12 candidate methodological lessons | — | §3, framing pending novelty searches |
+
+**Figures are specified in `notes/figure_specs.md`; no plotting code exists and
+none is authorized yet.**
+
+---
+
+## Part VI — Evidence index
 
 Claims map to `notes/decisions.md` entries (newer entries supersede older;
 supersession notes are appended in place, historical text preserved):
