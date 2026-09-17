@@ -1,9 +1,10 @@
 {
   "figure_id": "fig3_contrast_rules",
-  "generated_utc": "2026-09-17T19:14:23Z",
+  "generated_utc": "2026-09-17T19:24:20Z",
   "execution_revision": {
-    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
-    "dirty": true
+    "commit": "9689c8be864d3ff0d477f221c68485a7e142cc40",
+    "dirty_excluding_figure_outputs": false,
+    "pending_paths": []
   },
   "plotting_command": "python scripts/figures/make_fig3.py",
   "sources": [
@@ -134,7 +135,7 @@
   "outputs": [
     {
       "path": "figures/fig3_contrast_rules.pdf",
-      "sha256": "97427db4f5b9b109ea60a2cf78097e172d7c24d5540c0735133e08840d396b17"
+      "sha256": "5d591a76d6021bd461de3b5a3c6fd33060a42892148cb4ed42cb8c77c5b7f2c7"
     },
     {
       "path": "figures/fig3_contrast_rules.png",

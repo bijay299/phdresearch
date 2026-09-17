@@ -1,9 +1,10 @@
 {
   "figure_id": "fig1_k100_trajectories",
-  "generated_utc": "2026-09-17T19:06:24Z",
+  "generated_utc": "2026-09-17T19:24:15Z",
   "execution_revision": {
-    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
-    "dirty": true
+    "commit": "9689c8be864d3ff0d477f221c68485a7e142cc40",
+    "dirty_excluding_figure_outputs": false,
+    "pending_paths": []
   },
   "plotting_command": "python scripts/figures/make_fig1.py",
   "sources": [
@@ -161,7 +162,7 @@
   "outputs": [
     {
       "path": "figures/fig1_k100_trajectories.pdf",
-      "sha256": "ea261fdd4e0c4af29576caf31674fb90a190a5fa83f5b0107930dd520a7e395d"
+      "sha256": "2eb1c010e887baccade688f418c6f90e2ab35ffba76e7480e1dc6b9b3bbad6cb"
     },
     {
       "path": "figures/fig1_k100_trajectories.png",

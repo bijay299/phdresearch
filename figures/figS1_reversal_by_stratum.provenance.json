@@ -1,9 +1,10 @@
 {
   "figure_id": "figS1_reversal_by_stratum",
-  "generated_utc": "2026-09-17T19:17:05Z",
+  "generated_utc": "2026-09-17T19:24:21Z",
   "execution_revision": {
-    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
-    "dirty": true
+    "commit": "9689c8be864d3ff0d477f221c68485a7e142cc40",
+    "dirty_excluding_figure_outputs": false,
+    "pending_paths": []
   },
   "plotting_command": "python scripts/figures/make_figS1.py",
   "sources": [
@@ -82,7 +83,7 @@
   "outputs": [
     {
       "path": "figures/figS1_reversal_by_stratum.pdf",
-      "sha256": "2fb4eec3ebfe372d598ea62aa2a0861a5dfc291e2a81e4e5fe67d7619c96c226"
+      "sha256": "6eeee260da1d2ae3fbee769e5416ca298199ba8eee4d76bd617607a315fef0eb"
     },
     {
       "path": "figures/figS1_reversal_by_stratum.png",

@@ -1,9 +1,10 @@
 {
   "figure_id": "fig2_seed0_decomposition",
-  "generated_utc": "2026-09-17T19:15:40Z",
+  "generated_utc": "2026-09-17T19:24:18Z",
   "execution_revision": {
-    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
-    "dirty": true
+    "commit": "9689c8be864d3ff0d477f221c68485a7e142cc40",
+    "dirty_excluding_figure_outputs": false,
+    "pending_paths": []
   },
   "plotting_command": "python scripts/figures/make_fig2.py --from-artifact",
   "sources": [
@@ -11,7 +12,7 @@
       "path": "evidence/decomposition_fig2/fig2_plotting_inputs.csv",
       "sha256": "fd7f7f2af4acdee77fd1775004531238a5ac623c9b1662e3aac57b54133ec769",
       "bytes": 27129,
-      "tracked_in_git": false
+      "tracked_in_git": true
     },
     {
       "path": "logs_classcount/K500/faces_ce_seed0/results.jsonl",
@@ -76,7 +77,7 @@
   "outputs": [
     {
       "path": "figures/fig2_seed0_decomposition.pdf",
-      "sha256": "5297afea79ad6959c793e0c7febf5eb7df3ba134c3f10f523e9c374116663bed"
+      "sha256": "bd1a269ee1eb0fc6a9ef03abfbb8e7e7473ea60d9b36686ca36b51fae5c1aa07"
     },
     {
       "path": "figures/fig2_seed0_decomposition.png",
