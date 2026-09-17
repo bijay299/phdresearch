@@ -3048,9 +3048,20 @@ qualifies its K-trend paragraph and strengthens its conclusion 2.
 ## 2026-09-17 — K=100 seed-1 replication: direction and magnitude replicate, cell-level detail does not
 
 **Decided:** Record the K=100 seed-1 replication as eight valid unlearning
-cells plus two baselines, gate passed. The centred and uncentred
-difference-in-changes patterns from seed 0 **recur**; the per-cell pattern does
-not line up cell-by-cell, and seed 0's one unmatched cell does not recur.
+cells plus two baselines, gate passed. **The four-identity mean K=100 DiC
+recurs in direction and similar magnitude across two pipeline seeds, while
+identity-level contributions vary substantially.** Seed 0's one non-attaining
+cell does not recur.
+
+> **Audited and corrected 2026-09-17.** An evidence audit of this entry and of
+> the report under the output root corrected four things, all recorded below:
+> the matched-outcome table read both objectives at a single common epoch
+> instead of each at its own; seed 0's negative DiC was described as "two
+> negative cells" when it is one identity observed at two epochs; constant
+> `nc1_angular` was described as proof the feature mapping did not move, which
+> a scalar summary cannot establish; and an unsupported claim about image
+> selection at larger K was removed. No number below was produced by re-running
+> anything — all are recomputed from the existing trajectories.
 
 **Because:** the 2026-09-16 sweep rests on one seed. If the CE-versus-ArcFace
 difference is a property of the loss it should survive a change of seed.
@@ -3067,11 +3078,20 @@ K=100 the identity roster **and** the image manifest are byte-identical across
 seeds 0 and 1 (`identity_manifest_sha256 f1b43b10…`, `image_manifest_sha256
 3176469c…`): identity selection is deterministic, and no identity in the
 first-100 roster exceeds the `max_images_per_identity=50` cap, so the sampling
-RNG is a no-op at this K. The **train/test split does change** (`bb00eccc…` →
-`90627643…`, `130db252…` → `aab38157…`), as do init and shuffling. Split, init
-and shuffling move; image selection is inert. Do not describe it either way
-without that qualification — and do not assume it still holds at K=250/500/1000,
-where identities above the cap almost certainly exist.
+RNG is a no-op at this K. Precisely, the K=100 seed change gives:
+
+- **same identity roster** (same 100 identities, same order, same class
+  indices — {0,29,60,95} = {00001,00142,00284,00524} at both seeds);
+- **same selected image pool** (the same 4906 images, identical
+  `image_manifest_sha256`);
+- **changed train/test assignments** (`bb00eccc…` → `90627643…`, `130db252…` →
+  `aab38157…`), **changed initialization, changed shuffling**.
+
+Whether the selected image pool likewise stays fixed across seeds at
+K = 250/500/1000 is **not audited and is not asserted either way** — it would
+need seed-1 manifests at those K, which do not exist. (An earlier version of
+this entry asserted identities above the cap "almost certainly exist" there;
+that had no manifest evidence behind it and is withdrawn.)
 
 ### Baselines and the gate
 
@@ -3102,24 +3122,54 @@ supplied summary is a loose label, not a sign inversion.
 | uncentred | 2 | +0.3166 (4/4) | +0.3075 (4/4) |
 | uncentred | 3 | +0.3284 (4/4) | +0.3174 (4/4) |
 
-Centred means agree to ~0.008; uncentred to ~0.011. **Seed 1 is 4/4 positive at
-every epoch where seed 0 had two negative cells (fc95, ep2 and ep3).** Per-label
-values do **not** track between seeds — fc29's centred DiC at ep3 is +0.1382
-(seed 0) against +0.0173 (seed 1), fc95 −0.0214 against +0.1276.
+Centred means agree to ~0.008; uncentred to ~0.011.
 
-### Matched outcome — first epoch with 0/10 correct forget predictions
+**Sign accounting, stated precisely.** Seed 1 is positive in 4/4 identities at
+every epoch and both conventions. Seed 0's only negative centred DiC is at
+**fc95 (identity 00524), at epochs 2 and 3 — one unlearning cell observed at
+two epochs, not two distinct cells.** Counting it as two overstates the
+evidence, and an earlier version of this entry did. Separately: **a negative
+DiC is not an NC3 sign reversal.** Across all 16 K=100 cells at both seeds
+there are **zero** sign reversals — no same-class, same-convention sign change
+from a cell's own baseline.
 
-| fc | s0 CE | s0 Arc | s0 matched | s1 CE | s1 Arc | s1 matched |
-|---|---|---|---|---|---|---|
-| 0 | 1 | 2 | 2 | 1 | 2 | 2 |
-| 29 | 2 | 3 | 3 | 1 | 2 | 2 |
-| 60 | 1 | 1 | 1 | 1 | 1 | 1 |
-| 95 | 1 | **never** | **none** | 1 | 1 | 1 |
+Per-identity values do **not** track between seeds — fc29's centred DiC at ep3
+is +0.1382 (seed 0) against +0.0173 (seed 1); fc95 −0.0214 against +0.1276. The
+four-identity means agree far more closely than the identities behind them.
 
-**Seed 0's one missing outcome does not recur**: at seed 1, ArcFace fc95 reaches
-0/10 at epoch 1. Seed 1 has 4/4 matched, and matched-epoch DiC is positive in
-4/4 (both conventions). No cell was already at zero at baseline. Matching is on
-**observed output accuracy only** — not exposure, utility, or representation.
+### Matched outcome — each objective at ITS OWN first 0/10 epoch
+
+The rule is per objective. An earlier version of this entry reported a single
+"matched epoch" per identity, `max(e_CE, e_ArcFace)`, and read **both** heads
+there — which gave CE exposure past its own attainment point and inflated its
+Δ. Corrected: each objective is read at its own first-zero epoch, and the
+differing exposures are stated.
+
+| fc | identity | CE 1st 0/10 | ArcFace 1st 0/10 | exposure |
+|---|---|---|---|---|
+| 0 | 00001 | s0 1 / s1 1 | s0 2 / s1 2 | ArcFace +1 at both seeds |
+| 29 | 00142 | s0 2 / s1 1 | s0 3 / s1 2 | ArcFace +1 at both seeds |
+| 60 | 00284 | s0 1 / s1 1 | s0 1 / s1 1 | equal at both seeds |
+| 95 | 00524 | s0 1 / s1 1 | s0 **NONE** / s1 1 | s0: **no pair**; s1 equal |
+
+**Seed 0, fc95, ArcFace never reaches 0/10 in three epochs** (1/10 at epoch 3);
+**no attained-pair contrast is computed for it** and no epoch was substituted.
+That non-attainment does not recur — at seed 1 ArcFace fc95 attains at epoch 1.
+
+Geometry at each objective's own attainment epoch is in the report's section D.
+Because five of the seven attained pairs sit at different epochs, a difference
+of the two heads' Δ there is **not** a fixed-epoch DiC and confounds head with
+exposure; use the fixed-epoch table above for the head comparison.
+
+No cell was already at zero at baseline (seed-1 baselines range 4/10 to 10/10).
+Matching is on **observed output accuracy only** — not exposure, not utility,
+not representation state.
+
+**Observed attainment, narrowly.** CE attains at epoch 1 in 4/4 identities at
+seed 1 and 3/4 at seed 0; ArcFace attains in 4/4 at seed 1 (epochs 2,2,1,1) and
+3/4 at seed 0 (epochs 2,3,1, one non-attainment). No identity attains later at
+seed 1 than at seed 0 in either objective. With four identities on an integer
+epoch grid of {1,2,3} this describes these cells; it is not a rate.
 
 ### Also holding at seed 1
 
@@ -3128,10 +3178,66 @@ values do **not** track between seeds — fc29's centred DiC at ep3 is +0.1382
   the case the guard covers.
 - **Retain utility** within 0.82pp of each head's own epoch-0 baseline (CE
   −0.82 to +0.10pp, ArcFace −0.31 to +0.31pp). No cell forgot by breaking.
-- **`nc1_angular` constant across all four epochs of every cell**, confirming
-  from canonical outputs that the frozen backbone's feature mapping never moved.
-  BN buffers are frozen too — `backbone.eval()` in `_params`, pinned by
-  `src/test_dose_schedule.py:511`.
+
+### Frozen backbone — what is actually established, in three tiers
+
+1. **Code path (applies to these runs).** `src/unlearn.py: _params` under
+   `classifier_only=True` sets `requires_grad_(False)` on every backbone
+   parameter and calls `backbone.eval()`; the epoch loop guards the re-enable
+   with `if not classifier_only`, so it never returns to train mode, and the
+   optimizer is built over head parameters only. BatchNorm in `eval()` does not
+   update `running_mean`/`running_var`/`num_batches_tracked`. This reasoning is
+   state-independent, so it carries to a trained checkpoint.
+2. **Test suite.** `src/test_dose_schedule.py:511` compares the frozen run's
+   backbone buffers against `fresh()[0]`'s. That is meaningful because `run()`
+   itself starts from the same deterministic `fresh(seed)`, so it is really
+   "buffers after == buffers at the run's own start". **But** the harness model
+   is a toy `Linear + BatchNorm1d(5)` on CPU, not ResNet-18, and its starting
+   buffers are construction defaults (0, 1, 0), **not** a 40-epoch-trained
+   checkpoint's converged statistics. A fresh model is not equivalent to a
+   trained starting checkpoint and must not be cited as if it were.
+3. **Direct evidence from these eight runs: not available.** The cells saved no
+   model state — only `config/env/result/results/run.log/trajectory` files. The
+   only `.pt` files are the two *baseline* (starting) checkpoints, which do
+   carry 60 parameter tensors and 60 BN buffers each, but there is no saved
+   post-run counterpart. **Exact per-cell state equality of backbone parameters
+   and BN buffers before versus after unlearning cannot now be established from
+   the available artifacts,** and nothing was rerun to obtain it.
+
+`nc1_angular` is bitwise identical across all four epochs of every cell (CE
+0.9740622302714209, ArcFace 0.8210257728777127). That is **consistent with** an
+unchanged feature mapping but is **not proof**: a scalar summary of the feature
+matrix is many-to-one, so it can hold constant under representation changes. An
+earlier version of this entry called it confirmation that the mapping "never
+moved"; that overstated it.
+
+**For future runs:** persisting the post-unlearning backbone `state_dict`, or
+just a hash of its parameters and buffers, would make tier 3 available at
+negligible cost. That is a driver change, not a protocol change.
+
+### Compute
+
+Measured: 8 unlearning cells **436.9 s = 0.1214 GPU-h** (summed `method_s +
+eval_s`); 2 baselines **~90.1 s = ~0.0250 GPU-h** (41 s + 41 s logged epoch
+time at 1 s print resolution, plus 3.5 s / 4.5 s eval — coarse). Sum of
+measured components **527.0 s = 0.1464 GPU-h**. End-to-end wall clock on the
+single GPU **625 s = 10.4 min = 0.1737 GPU-h** (pre-launch provenance write
+11:17:25 to last cell log 11:27:51); the ~98 s excess over the component sum is
+startup, CPU dataset scans and inter-run gaps, not separately instrumented. An
+earlier completion report said "well under 0.1 GPU-hours" — that was wrong in
+both directions of rounding and is withdrawn.
+
+### Artifact persistence
+
+Everything under the output root is **git-ignored** (`runs/`, plus `*.pt`):
+report, the three analysis CSVs, `results.json`, the provenance manifest,
+commands and environment records, both baseline checkpoints, and all per-cell
+logs and trajectories. The **tracked** record is this entry plus
+`configs/facesK100_*.yaml` and the `src/`+`scripts/` code, which together pin
+execution revision `056b522`, the artifact location, the configuration, the
+gate decision and the key results. **No durable or off-machine storage is known
+to exist** for the artifact tree — it lives only on this machine's local
+filesystem, and no backup was created.
 
 ### Explicitly not claimed
 
@@ -3139,11 +3245,19 @@ values do **not** track between seeds — fc29's centred DiC at ep3 is +0.1382
 - **The eight cells are four identities × two objectives at one seed**, not
   eight independent seed replications: within a seed they share one backbone per
   head, one split, one baseline checkpoint.
-- **Positive DiC is not superior unlearning**, and zero output accuracy is not
-  erasure — the backbone is frozen, so features cannot move by construction.
+- **Positive DiC is not superior unlearning.** It says CE's
+  classifier-to-class-mean cosine moves further than ArcFace's under a matched
+  forget dose. Nothing more.
+- **Three different things are being measured and must stay separate**: output
+  forgetting (attainment of 0/10), metric behaviour of NC3 under a frozen
+  classifier-only update, and representation erasure. Only the first two are
+  observed here. **Zero output accuracy is not erasure**, and nothing in these
+  cells measures whether the identity remains recoverable from the features.
 - **Integer counts**: forget accuracy is over 10 test images (0.1 granularity).
-- Per-label `s1−s0` contrasts mix seed effect with shifted per-identity
+- Per-identity `s1−s0` contrasts mix seed effect with shifted per-identity
   baseline difficulty; same person, different split.
+- **Attainment epochs are not comparable exposures** — five of the seven
+  attained pairs reach 0/10 at different epochs.
 
 **Supersedes:** nothing. The 2026-09-16 sweep entry stands; this adds a second
 seed at K=100 only.
