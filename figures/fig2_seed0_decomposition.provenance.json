@@ -1,0 +1,94 @@
+{
+  "figure_id": "fig2_seed0_decomposition",
+  "generated_utc": "2026-09-17T19:15:40Z",
+  "execution_revision": {
+    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
+    "dirty": true
+  },
+  "plotting_command": "python scripts/figures/make_fig2.py --from-artifact",
+  "sources": [
+    {
+      "path": "evidence/decomposition_fig2/fig2_plotting_inputs.csv",
+      "sha256": "fd7f7f2af4acdee77fd1775004531238a5ac623c9b1662e3aac57b54133ec769",
+      "bytes": 27129,
+      "tracked_in_git": false
+    },
+    {
+      "path": "logs_classcount/K500/faces_ce_seed0/results.jsonl",
+      "sha256": "050ad34e100514863869951455907bbbeabbeadd27ea6e8faa8ab54d620d2ab6",
+      "bytes": 557,
+      "tracked_in_git": false
+    },
+    {
+      "path": "logs_classcount/K500/faces_arcface_seed0/results.jsonl",
+      "sha256": "86f1a9e16fdc866533adca3c5dac48c7838c175efb1fb0f939a77d506e31e7bc",
+      "bytes": 573,
+      "tracked_in_git": false
+    },
+    {
+      "path": "logs_classcount_decomposition/decomposition.json",
+      "sha256": "3056a91305f36c7ef30ad370c2804ab3055b2d454e9e0d983e42728efdb4eee5",
+      "bytes": 208305,
+      "tracked_in_git": false
+    }
+  ],
+  "consumed": {
+    "cells": 24,
+    "epochs": [
+      1,
+      3
+    ],
+    "K": [
+      100,
+      250,
+      1000
+    ],
+    "panel_C_dic_epoch1": {
+      "delta_centred_production": {
+        "100": 0.057439430371388156,
+        "250": 0.10932506204963058,
+        "1000": 0.1393175218700005
+      },
+      "delta_centred_weight_only": {
+        "100": 0.05607074163623155,
+        "250": 0.10873000367131316,
+        "1000": 0.139261873793108
+      },
+      "delta_centred_centre_only": {
+        "100": 0.000413489406609846,
+        "250": 0.00020029740427043863,
+        "1000": 0.0003403981181312188
+      },
+      "interaction_residual": {
+        "100": 0.000955199328546763,
+        "250": 0.00039476097404697597,
+        "1000": -0.00028475004123873493
+      }
+    },
+    "k500_gate": {
+      "ce": 0.6896763621466612,
+      "arcface": 0.7132322818517002,
+      "gap_pp": 2.355591970503901
+    },
+    "panel_A_field": "forget_weight_angle_deg",
+    "panel_B_field": "forget_weight_norm_ratio"
+  },
+  "outputs": [
+    {
+      "path": "figures/fig2_seed0_decomposition.pdf",
+      "sha256": "5297afea79ad6959c793e0c7febf5eb7df3ba134c3f10f523e9c374116663bed"
+    },
+    {
+      "path": "figures/fig2_seed0_decomposition.png",
+      "sha256": "10c7475b84c4d48590b0a89cb12e277daad00e93b15384b5af1f1e7263dfcc7f"
+    }
+  ],
+  "notes": [
+    "Tracked table verified bit-equal to the artifact tree for every field consumed.",
+    "Seed 0 only. Stratum A, 24 cells, K in {100, 250, 1000}.",
+    "K=500 tick is drawn with an empty data region; no connecting line spans it in any panel.",
+    "Panel C bars are baseline-subtracted counterfactual differences-in-changes of the metric, not causal contributions and not a measure of unlearning quality.",
+    "Small bars are labelled with their values; none is labelled '0'.",
+    "No error bars anywhere: identities within a seed share one backbone per head, one split and one baseline checkpoint."
+  ]
+}

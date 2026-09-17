@@ -1,0 +1,50 @@
+{
+  "purpose": "Figure 2 plotting inputs, copied verbatim from the git-ignored decomposition artifact tree.",
+  "extraction_revision": {
+    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
+    "dirty": true
+  },
+  "source": {
+    "path": "logs_classcount_decomposition/decomposition.json",
+    "sha256": "3056a91305f36c7ef30ad370c2804ab3055b2d454e9e0d983e42728efdb4eee5",
+    "bytes": 208305,
+    "tracked_in_git": false,
+    "produced_by": "scripts/nc3_decomposition.py"
+  },
+  "extracted_rows": 72,
+  "cells": 24,
+  "epochs_per_cell": [
+    1,
+    2,
+    3
+  ],
+  "fields_copied": [
+    "delta_centred_production",
+    "delta_centred_weight_only",
+    "delta_centred_centre_only",
+    "interaction_residual",
+    "delta_uncentred_production",
+    "nc3_centred_forget",
+    "nc3_centred_forget_epoch0",
+    "nc3_uncentred_forget",
+    "nc3_uncentred_forget_epoch0",
+    "forget_weight_angle_deg",
+    "forget_weight_norm_ratio",
+    "retain_centre_angle_deg",
+    "retain_centre_norm_ratio",
+    "centred_forget_weight_angle_deg",
+    "centred_forget_weight_norm_ratio"
+  ],
+  "float_encoding": "Python repr() of the float read from the source; round-trips exactly under float().",
+  "checks_run": [
+    "cell count == n_cells == 24",
+    "delta_production - delta_weight_only - delta_centre_only == interaction_residual to 1e-12, per cell-epoch"
+  ],
+  "not_done": [
+    "No recomputation of the decomposition from .npz state.",
+    "No training, inference or replay."
+  ],
+  "outputs": {
+    "fig2_plotting_inputs.csv": "fd7f7f2af4acdee77fd1775004531238a5ac623c9b1662e3aac57b54133ec769"
+  }
+}

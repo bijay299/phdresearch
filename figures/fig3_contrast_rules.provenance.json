@@ -1,0 +1,150 @@
+{
+  "figure_id": "fig3_contrast_rules",
+  "generated_utc": "2026-09-17T19:14:23Z",
+  "execution_revision": {
+    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
+    "dirty": true
+  },
+  "plotting_command": "python scripts/figures/make_fig3.py",
+  "sources": [
+    {
+      "path": "evidence/k100_seed1/tables/fixed_epoch_dic.csv",
+      "sha256": "082c736c3675107f69c199f0b49ca84891677ade081a7f82b8ac41971dc9e96d",
+      "bytes": 4070,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/tables/matched_outcome_dic.csv",
+      "sha256": "132c2512e27d425e805ac29d5ab6a01dd7dd50076a763297fe613ce67ec59287",
+      "bytes": 1497,
+      "tracked_in_git": true
+    }
+  ],
+  "consumed": {
+    "panel_A": {
+      "seed0/00001": [
+        0.0970746773798673,
+        0.12169480892507678,
+        0.12378950460204674
+      ],
+      "seed0/00142": [
+        0.09365888533427669,
+        0.12731810680337252,
+        0.1382350649830405
+      ],
+      "seed0/00284": [
+        0.018519200563247296,
+        0.012441562060315103,
+        0.0020239436918424447
+      ],
+      "seed0/00524": [
+        0.02050495820816134,
+        -0.002352355682400664,
+        -0.021428397887104156
+      ],
+      "seed0/descriptive_mean": [
+        0.057439430371388156,
+        0.06477553052659094,
+        0.06065502884745638
+      ],
+      "seed1/00001": [
+        0.07347048906105658,
+        0.0926021701672507,
+        0.09384243929224256
+      ],
+      "seed1/00142": [
+        0.02705759004643582,
+        0.024598456882431452,
+        0.017319245513827686
+      ],
+      "seed1/00284": [
+        0.040584328870660547,
+        0.04315731295446723,
+        0.03547400986065752
+      ],
+      "seed1/00524": [
+        0.09673657643718625,
+        0.12288667607043169,
+        0.12761137111347365
+      ],
+      "seed1/descriptive_mean": [
+        0.0594622461038348,
+        0.07081115401864527,
+        0.06856176644505035
+      ]
+    },
+    "panel_B": {
+      "seed0/00001": {
+        "dic": 0.09302585867315105,
+        "ce_epoch": 1,
+        "arcface_epoch": 2,
+        "exposure": "unequal (arcface +1)"
+      },
+      "seed0/00142": {
+        "dic": 0.12884277430289814,
+        "ce_epoch": 2,
+        "arcface_epoch": 3,
+        "exposure": "unequal (arcface +1)"
+      },
+      "seed0/00284": {
+        "dic": 0.018519200563247296,
+        "ce_epoch": 1,
+        "arcface_epoch": 1,
+        "exposure": "equal"
+      },
+      "seed1/00001": {
+        "dic": 0.06430518033897203,
+        "ce_epoch": 1,
+        "arcface_epoch": 2,
+        "exposure": "unequal (arcface +1)"
+      },
+      "seed1/00142": {
+        "dic": -0.00727364360827909,
+        "ce_epoch": 1,
+        "arcface_epoch": 2,
+        "exposure": "unequal (arcface +1)"
+      },
+      "seed1/00284": {
+        "dic": 0.040584328870660547,
+        "ce_epoch": 1,
+        "arcface_epoch": 1,
+        "exposure": "equal"
+      },
+      "seed1/00524": {
+        "dic": 0.09673657643718625,
+        "ce_epoch": 1,
+        "arcface_epoch": 1,
+        "exposure": "equal"
+      }
+    },
+    "no_pair": [
+      "seed0/00524"
+    ],
+    "highlight": {
+      "matched": -0.00727364360827909,
+      "fixed_epoch": [
+        0.02705759004643582,
+        0.024598456882431452,
+        0.017319245513827686
+      ]
+    },
+    "n_attained_pairs": 7,
+    "n_unequal_exposure": 4
+  },
+  "outputs": [
+    {
+      "path": "figures/fig3_contrast_rules.pdf",
+      "sha256": "97427db4f5b9b109ea60a2cf78097e172d7c24d5540c0735133e08840d396b17"
+    },
+    {
+      "path": "figures/fig3_contrast_rules.png",
+      "sha256": "936932d37d5386679e43163d445bdcf386f557369dcd2707b552c06c62d163fc"
+    }
+  ],
+  "notes": [
+    "Centred convention only; both panels share one y-axis.",
+    "Panel A means are descriptive over a complete and identical four-identity set, drawn with no band, error bar or interval.",
+    "Panel B has no means, and the absent seed-0 / 00524 observation is drawn outside the numerical data region.",
+    "4 of the 7 attained pairs read the two objectives at different epochs, so Panel B confounds objective with exposure."
+  ]
+}

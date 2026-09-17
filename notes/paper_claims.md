@@ -47,13 +47,24 @@ contrasts are kept separate and never pooled.**
       uncentred  NC3_k = cos( mu[k]      ,  W[k]     )
 
   The cosine L2-normalises each argument internally, so `W` is passed raw
-  (`fc.weight` for CE, `W` for ArcFace; neither row-normalised beforehand) and
-  weight norm does not enter the value. With `centre=False` the centring branch
-  is skipped entirely, so `g_0` and `c` play no part in the uncentred
-  convention. Every reversal claim in this project is **centred**.
+  (`fc.weight` for CE, `W` for ArcFace; neither row-normalised beforehand).
+  With `centre=False` the centring branch is skipped entirely, so `g_0` and `c`
+  play no part in the uncentred convention. Every reversal claim in this project
+  is **centred**.
+- **Where the weight norm does and does not enter.** A cosine is invariant to
+  scaling *its whole argument*. In the **uncentred** convention the argument is
+  `W[k]` itself, so `‖W[k]‖` genuinely does not enter the value. In the
+  **centred** convention the argument is `W[k] − c`, and the centre `c` is
+  subtracted **before** normalising: scaling `W[k]` against a fixed `c` changes
+  the *direction* of `W[k] − c`, so the raw weight magnitude **can** affect
+  centred geometry. An earlier draft stated flatly that "weight norm does not
+  enter the value"; that is true only of the uncentred convention. The measured
+  norm ratios reported in C6a are **descriptive**, and no attribution from them
+  to the centred metric is claimed here — establishing one would need a
+  counterfactual on the norm, which was not run.
 - **What the two conventions can and cannot support.** The two conventions place
   the same weight rotation at **different baseline angles**, so they have
-  different sensitivity (`d cos / d theta = -sin theta`) and can disagree about
+  different sensitivity and can disagree about
   whether anything changed. **Descriptive cross-objective comparison of
   uncentred levels is possible and is reported** — CE baselines sit at +0.51 to
   +0.72 and ArcFace baselines at −0.878 to −0.895, which is itself a stated
@@ -63,7 +74,18 @@ contrasts are kept separate and never pooled.**
   **cannot be interpreted as a difference in unlearning quality or in forgetting
   achieved**. For that purpose use the within-head change from each cell's own
   epoch 0, and for cross-objective comparison of *change* prefer the centred
-  convention, whose baseline angles are closer together.
+  convention, whose baseline angles are closer together. Plotting uncentred NC3
+  as a within-head change rather than a level is a **presentation choice** that
+  follows from this, not a prohibition: a *descriptive* statement of the two
+  objectives' baseline levels is reported (C9) and is legitimate.
+- **Neither NC3, nor a change in it, nor DiC measures unlearning quality.**
+  These are geometric descriptions of where one classifier row sits relative to
+  a class-mean feature and a reference frame. They are not a measure of how much
+  was forgotten, of whether the identity remains recoverable, or of the quality
+  of an unlearning procedure. Baseline subtraction does not change this: a
+  baseline-subtracted geometric quantity is still a geometric quantity. Output
+  forgetting, metric behaviour and representation erasure are **three different
+  things**, and only the first two are observed anywhere in this project.
 - **Flip / sign reversal** — a sign change for the **same model, same class,
   same convention**, from that model's own baseline. Nothing else earns the word.
 - **DiC** = (NC3_ArcFace,t − NC3_ArcFace,0) − (NC3_CE,t − NC3_CE,0). **Project
@@ -309,18 +331,26 @@ reference-frame decomposition over stratum A's 24 cells. **No seed-1
 decomposition exists**, so none of it is a two-seed result. The research lead
 has closed this line: do not reopen without specific contradictory evidence.
 
-**C6a — rotation and norm (seed 0).** Forget-weight rotation, mean over four
-identities:
+**C6a — rotation and norm (seed 0).** Forget-weight rotation from epoch 0. The
+first two columns are the spread of the **per-K means** over four identities;
+the bracketed figures are the **per-cell** range, which is wider and is what
+Figure 2 plots:
 
-| epoch | CE | ArcFace |
-|---|---|---|
-| 1 | 16.7–17.8° | 3.3–4.7° |
-| 3 | 20.8–22.6° | 5.2–6.2° |
+| epoch | CE (mean over K) | ArcFace (mean over K) | CE per-cell | ArcFace per-cell |
+|---|---|---|---|---|
+| 1 | 16.74–17.81° | 3.28–4.74° | 16.24–18.56° | 2.52–5.05° |
+| 3 | 20.79–22.60° | 5.22–6.23° | 20.04–23.59° | 4.44–6.50° |
 
-Forget-weight norm ratio: CE 0.830–0.874, ArcFace 0.996–1.001. So at seed 0,
-CE's classifier rotates several times further and loses norm, while ArcFace's
-rotates little and preserves norm. Norm does not enter the cosine; it is a
-descriptive fact about the weight, not a driver of `nc3_*_forget`.
+Forget-weight norm ratio, per-cell across both epochs: CE **0.8129–0.8778**,
+ArcFace **0.9963–1.0016**. So at seed 0, CE's classifier rotates several times
+further and contracts, while ArcFace's rotates little and holds its norm.
+
+These norm ratios are **descriptive**. They are *not* asserted to be inert with
+respect to the metric: as the conventions note above records, the centred cosine
+takes `W[k] − c`, so a change in `‖W[k]‖` against a given `c` can move the
+centred value. No counterfactual on the norm was run, so this project makes
+**no attribution** from norm to `nc3_centred_forget` in either direction. The
+uncentred convention is genuinely norm-invariant.
 
 **C6b — the K ordering is a reference-frame effect, in this seed-0
 decomposition.** Centred DiC orders K=100 < 250 < 1000, but:
@@ -329,41 +359,75 @@ decomposition.** Centred DiC orders K=100 < 250 < 1000, but:
   retain-weight centre at epoch 0 reproduces the ordering essentially unchanged
   (+0.0561/+0.1087/+0.1393 against production +0.0574/+0.1093/+0.1393 at
   epoch 1). The **centre-only** contribution to DiC is **small but non-zero**:
-  +0.000413 / +0.000200 / +0.000340 at epoch 1 and +0.000511 / +0.000626 /
-  +0.001007 at epoch 3, i.e. two to three orders of magnitude below production.
-  Across **all 24 cells and all four epochs** the largest single-cell
-  |centre-only| is **0.006460** and the largest |residual| **0.006797**, against
-  a largest |production| of **0.200685** — *those three are all-epoch extrema,
-  not epoch-1 values.*
+  +0.000413 / +0.000200 / +0.000340 at epoch 1 — a **range of 0.000200 to
+  0.000413** — and +0.000511 / +0.000626 / +0.001007 at epoch 3, i.e. two to
+  three orders of magnitude below production. **Keep the three scopes apart:**
+  the epoch-1 range is 0.000200–0.000413; epoch 3 reaches 0.001007; and across
+  **all 24 cells and all four epochs** the largest *single-cell* |centre-only|
+  is **0.006460** and the largest |residual| **0.006797**, against a largest
+  |production| of **0.200685**. An earlier draft quoted "0.0002 to 0.0010" as an
+  epoch-1 range; that upper end is epoch 3's.
 - **Not more rotation at larger K.** CE's forget-weight rotation in **K order**
   is 17.8148° / 16.7366° / 17.4080° at epoch 1 — **non-monotone, spanning
   1.0782°** — and 22.6002° / 20.7862° / 21.4885° at epoch 3, spanning 1.8140°,
   also non-monotone. (An earlier draft quoted the epoch-3 span as if it were
   epoch 1's.)
-- **Where the ordering enters — the angle domain, read in K order.** For CE at
-  epoch 1:
+- **Where the ordering enters — the angle domain, read in K order.**
 
-| K | uncentred θ₀ | uncentred Δθ | sin θ₀ | uncentred ΔNC3 | centred θ₀ | centred Δθ | centred ΔNC3 |
-|---|---|---|---|---|---|---|---|
-| 100 | 57.97° | 17.77° | 0.8478 | −0.2841 | 31.93° | 9.15° | −0.0948 |
-| 250 | 53.21° | 16.69° | 0.8008 | −0.2552 | 34.15° | 9.60° | −0.1053 |
-| 1000 | 54.07° | 17.35° | 0.8097 | −0.2681 | 39.05° | 11.32° | −0.1378 |
+  **Method.** For each cell, θ = arccos(NC3) in the relevant convention, and the
+  change is evaluated **exactly** as
+
+      Δcos = cos(θ₀ + Δθ) − cos(θ₀)
+
+  with no small-angle or derivative approximation: the rotations here are 9–18°,
+  where a linearisation is visibly wrong. Every quantity is computed **per cell
+  first** and averaged only afterwards; the cosine of an averaged angle is never
+  substituted for an averaged cosine. (`−sin θ₀` is quoted below only as *local
+  sensitivity intuition* for why a larger baseline angle amplifies a given
+  rotation, never as the accounting.)
+
+  For CE at epoch 1, means over the four identities of per-cell quantities:
+
+| K | unc θ₀ | unc Δθ | unc ΔNC3 | cen θ₀ | cen Δθ | cen ΔNC3 |
+|---|---|---|---|---|---|---|
+| 100 | 57.97° | 17.77° | −0.2841 | 31.93° | 9.14° | −0.0948 |
+| 250 | 53.21° | 16.69° | −0.2552 | 34.15° | 9.60° | −0.1053 |
+| 1000 | 54.07° | 17.35° | −0.2681 | 39.05° | 11.32° | −0.1378 |
 
   In the **centred** frame both the baseline angle (31.93 < 34.15 < 39.05) and
-  the projected rotation (9.15 < 9.60 < 11.32) **increase monotonically with K**
+  the projected rotation (9.14 < 9.60 < 11.32) **increase monotonically with K**
   and push the same way, so centred ΔNC3 orders monotonically
   (−0.0948, −0.1053, −0.1378).
 
   In the **uncentred** frame the rotation Δθ is essentially flat
   (17.77 / 16.69 / 17.35, matching the weight rotation above), and the baseline
   angle θ₀ is **non-monotone in K — it falls from 100 to 250 and rises again at
-  1000** (57.97 / 53.21 / 54.07). Since a cosine's sensitivity to rotation is
-  `−sin θ`, and sin θ₀ inherits that shape (0.8478 / 0.8008 / 0.8097), the
-  uncentred changes inherit it too (−0.2841 / −0.2552 / −0.2681). **That is why
-  the uncentred convention shows no K ordering: its baseline angle is not
-  monotone in K, not because the underlying rotation differs.** (An earlier
-  draft listed these angles sorted by magnitude rather than by K, which made a
-  non-monotone sequence read as a decreasing one.)
+  1000** (57.97 / 53.21 / 54.07). The uncentred changes inherit that shape
+  (−0.2841 / −0.2552 / −0.2681). **That is why the uncentred convention shows no
+  K ordering: its baseline angle is not monotone in K, not because the
+  underlying rotation differs.** (An earlier draft listed these angles sorted by
+  magnitude rather than by K, which made a non-monotone sequence read as a
+  decreasing one.)
+
+  **Exact transplant, per cell.** Evaluating each cell's rotation at the *other*
+  convention's baseline angle — again exactly, `cos(θ₀ + Δθ) − cos(θ₀)` — shows
+  how much of the difference is the frame rather than the motion:
+
+| K | cen Δθ applied at cen θ₀ | cen Δθ applied at **unc** θ₀ | unc Δθ applied at unc θ₀ | unc Δθ applied at **cen** θ₀ |
+|---|---|---|---|---|
+| 100 | −0.0948 | −0.1415 | −0.2841 | −0.2019 |
+| 250 | −0.1053 | −0.1420 | −0.2552 | −0.1962 |
+| 1000 | −0.1378 | −0.1702 | −0.2681 | −0.2224 |
+
+  Moving the *same* per-cell rotation into the uncentred baseline angle inflates
+  its effect on the cosine by roughly 1.2–1.5× and flattens the K ordering
+  (−0.1415 / −0.1420 / −0.1702 against −0.0948 / −0.1053 / −0.1378). This is
+  arithmetic on the metric, not a statement about training, and it does not
+  measure unlearning quality.
+
+  For scale, the linearisation the earlier draft leaned on understates the exact
+  change by about 8–11 % at these rotations (e.g. K=100 uncentred: exact
+  −0.2841 against −sin θ₀·Δθ = −0.2630), which is why the exact form is used.
 - **Why each objective's centre moves the metric so little, for different
   reasons.** CE's retain-weight centre is nearly the zero vector
   (`|c_0|/|w_0|` = 0.0248 / 0.0104 / 0.0012), so even a sizeable rotation of it
@@ -421,7 +485,9 @@ ordering rests on **three** K points (K=500 absent — it failed the 2.00pp
 fairness gate at 2.36pp and was not tuned to rescue it), adjacent K overlap per
 cell, and at epoch 3 K=100 includes a negative cell under the fixed centre
 (identity 00524, −0.0226). K covaries with retain-set size, retain steps per
-epoch, active-step spacing, BatchNorm exposure and task difficulty; candidate
+epoch, active-step spacing, **baseline-training** BatchNorm exposure (the
+unlearning phase runs the backbone in `eval()` mode and accrues none) and task
+difficulty; candidate
 forget exposure varies 1240/3080/12,120 per epoch while only the *active* count
 (360) is held fixed. The counterfactuals are **interventions on the metric, not
 on training**; `A` is nonlinear in both arguments, so the four corners are
@@ -569,7 +635,7 @@ exactly +1/10 there (CE 8/10 vs 7/10; ArcFace 6/10 vs 5/10) — and is recorded 
 the absence of a difference there** — faces-1000's paired differences are
 uniformly non-positive and faces-100's are mixed, which is *not* the same as
 "no difference"; what does not recur is specifically CIFAR's **positive**
-pattern. **No formal significance** is claimed or computable here: n=4
+pattern. **No inferential claim is supported by the present analysis**: n=4
 non-independent identities per group, one seed, and denominators of 10 (faces-1000)
 or 25–31 (faces-100). Representation erasure — the probe is fitted post hoc on
 labelled forget-class examples, and the unlearning backbone is frozen so there
@@ -652,7 +718,7 @@ State these as scope, not as apology. Each is blocked by a specific, named gap.
 |---|---|
 | **Any representation-erasure claim** | Backbone frozen in every main cell (code path); seed-0 replay shows class means bit-identical across epochs — a per-class summary, **not** per-feature equality — and no such check exists for seed 1. The probe metric measures post-hoc linear decodability after fitting on labelled forget-class examples, not erasure. |
 | **Class-count causality** | C6 rules out the obvious mechanism and identifies a measurement-geometry origin; K covaries with retain-set size, step counts, active-step spacing, BN exposure and task difficulty. K=500 is absent. |
-| **Inferential claims from the current design** | No statistical test is reported anywhere, and the tests a reader would reach for are **inappropriate for this design**, not merely unrun: treating the four identities as independent replicates is invalid (within a seed they share one backbone per head, one split, one baseline checkpoint), and two seeds give no usable variance estimate for a seed effect. Descriptive means, ranges and sign counts are reported instead. This is a statement about **what these data can support**, not that no test could ever be computed on any design — a properly powered study with independent seeds as the replication unit, and identities as a within-seed factor, would admit standard inference. |
+| **Inferential claims from the current design** | **No inferential claim is supported by the present analysis.** No statistical test is reported anywhere, and the tests a reader would reach for are **inappropriate for this design**, not merely unrun: treating the four identities as independent replicates is invalid (within a seed they share one backbone per head, one split, one baseline checkpoint), and two seeds give no usable variance estimate for a seed effect. Descriptive means, ranges and sign counts are reported instead. This is a statement about **what these data can support**, not that no test could ever be computed on any design — a properly powered study with independent seeds as the replication unit, and identities as a within-seed factor, would admit standard inference. |
 | **Within-identity generalisation to unlearner-withheld *training* images** | See the dedicated note below — the test-split evaluation that *does* exist must not be confused with the `split_mode=subset` protocol that does not. |
 | **Any CosFace result** | Never run. The head exists in `src/heads.py` and in `configs/cifar_cosface.yaml`; no experiment used it. |
 | **faces-100 reproducibility from the repository alone** | The extraction seed for `casia-webface-folders-100id` was never recorded, and identity selection inside the converter is `rng.choice`-driven. That subset is not reconstructable from artifacts; it is a separate lineage from the nested sweep and must not be pooled with it. |

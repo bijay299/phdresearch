@@ -3352,6 +3352,89 @@ seed at K=100 only.
 
 ---
 
+## 2026-09-17 — Paper figures implemented from recorded evidence (CPU only)
+
+**Decided:** Render the three main figures and one supplementary figure from
+already-recorded artifacts, with tracked plotting inputs, provenance sidecars
+and an independent verification pass. Scripts in `scripts/figures/`, output in
+`figures/`.
+
+- **Figure 1** `fig1_k100_trajectories` — K=100 output forgetting and NC3
+  trajectories, both seeds, both objectives, all four identities (C1, C3).
+- **Figure 2** `fig2_seed0_decomposition` — seed-0 rotation, norm ratio and the
+  reference-frame decomposition of centred DiC (C6a, C6b).
+- **Figure 3** `fig3_contrast_rules` — fixed-epoch versus own-attainment centred
+  DiC (C5, C7).
+- **Figure S1** `figS1_reversal_by_stratum` — stratified reversal counts,
+  supplementary and contextual only (C2).
+
+**Because:** the claims were settled and the evidence was already recorded; no
+GPU work, training, inference, replay, new seed, new K or new metric was needed
+or authorized, and none was run.
+
+**Scientific corrections applied in the same pass** (to `notes/paper_claims.md`
+and `notes/figure_specs.md`):
+
+- **The weight norm can affect centred geometry.** A cosine is invariant to
+  scaling its whole argument, so the *uncentred* cosine is norm-invariant — but
+  the centred cosine takes `w − c`, and changing `w` against a fixed `c` changes
+  that direction. The previous blanket "weight norm does not enter the value"
+  was true only of the uncentred convention. Norm ratios are now stated as
+  descriptive, with no attribution claimed in either direction; no
+  counterfactual on the norm was run.
+- **Exact finite-angle accounting replaces the linearisation.** C6b now uses
+  `Δcos = cos(θ₀ + Δθ) − cos(θ₀)` computed per cell and aggregated afterwards,
+  never the cosine of averaged angles. `−sin θ₀` is retained only as local
+  sensitivity intuition; at these 9–18° rotations it understates the exact
+  change by 8–11 %. An exact per-cell transplant table was added.
+- **Epoch-1 centre-only DiC range corrected to 0.000200–0.000413.** The earlier
+  "0.0002 to 0.0010" imported epoch 3's maximum (+0.001007). Epoch-1,
+  later-epoch and single-cell-extremum scopes are now stated separately.
+- **Neither NC3, nor a baseline-subtracted change in it, nor DiC measures
+  unlearning quality.** Stated as a reading convention and repeated in the
+  captions; baseline subtraction does not upgrade a geometric quantity.
+- **Statistical-impossibility wording removed**, replaced by "no inferential
+  claim is supported by the present analysis".
+- **BatchNorm phases separated everywhere.** Baseline training updates running
+  statistics; classifier-only unlearning runs the backbone in `eval()` and
+  accrues no BatchNorm exposure at any K. The C6c list and the Figure 2
+  "must not imply" block now say so.
+- **Uncentred-change-only plotting is a presentation choice**, not a prohibition
+  on descriptive baseline-level comparison (which C9 reports).
+
+**Preservation:** `logs_classcount_decomposition/decomposition.json` is
+git-ignored, so `scripts/figures/extract_fig2_inputs.py` copies the 72 cell-epoch
+rows Figure 2 consumes into the tracked
+`evidence/decomposition_fig2/fig2_plotting_inputs.csv`, with the source SHA-256
+and extraction provenance. `make_fig2.py --from-artifact` asserts the tracked
+table is bit-equal to the artifact for every consumed field. That assertion
+caught a real bug during implementation: cell names repeat across K, so an
+artifact lookup keyed on `(cell_name, epoch)` silently collapsed 72 rows to 24.
+K is now part of the key.
+
+**Verification:** `scripts/figures/verify_figures.py` runs 66 read-only checks
+and all pass — hashes, denominators, first-0/10 epochs, the single missing
+attainment, axis coverage in all four figures, zero centred sign reversals
+across the 16 K=100 cells, the residual identity for all 72 cell-epochs, Panel C
+bar heights, the corrected centre-only range, the exact finite-angle identity,
+the K=500 gate record and direction, the fc29 sign disagreement at full
+precision, and the stratified S1 counts.
+
+**Not done:** no checkpoint backup (still unresolved); no new experiment; no
+recomputation of the decomposition from `.npz` state; no pooled rate across
+strata anywhere.
+
+**Note on older entries.** The 2026-09-16 entries describe the head-fairness
+gate as "pre-registered". It is **prespecified** — fixed in advance in this
+repository — but no registration record exists. `notes/paper_claims.md` and
+`notes/figure_specs.md` use "prespecified"; those older entries stand as written
+and are superseded on this point.
+
+**Supersedes:** the figure specifications in `notes/figure_specs.md`, which were
+specification-only and are now marked as implemented, with final captions.
+
+---
+
 ## Open decisions
 
 - [x] Dataset — **CASIA-WebFace**, resolved 2026-09-10. Kaggle RecordIO

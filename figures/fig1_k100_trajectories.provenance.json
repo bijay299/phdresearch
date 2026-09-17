@@ -1,0 +1,177 @@
+{
+  "figure_id": "fig1_k100_trajectories",
+  "generated_utc": "2026-09-17T19:06:24Z",
+  "execution_revision": {
+    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
+    "dirty": true
+  },
+  "plotting_command": "python scripts/figures/make_fig1.py",
+  "sources": [
+    {
+      "path": "evidence/k100_seed1/tables/trajectories_both_seeds.csv",
+      "sha256": "610e61e878d4ccf1f26861b352cfc1ec018a84e21db965e5cd91e14e4da8620d",
+      "bytes": 9746,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed0/arcface_fc0.jsonl",
+      "sha256": "75a2a10df880eaa63f69ddea21fe6519663035b939cf19b56bfe01a9c3b3c8f7",
+      "bytes": 1191,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed0/arcface_fc29.jsonl",
+      "sha256": "4ce1e6df23c582afb9175c6a1a1c0d79ff43caecfded7ce1e226ca10a41665f8",
+      "bytes": 1195,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed0/arcface_fc60.jsonl",
+      "sha256": "cc6bfd54695ab3e0cf05ae6dc610d7449c1f440f47cd0a989b8f69bf4d0a2321",
+      "bytes": 1194,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed0/arcface_fc95.jsonl",
+      "sha256": "574414e34d66bfd414ddddb82ae1e48b1c3744374458982682b5f264eb2f60fd",
+      "bytes": 1194,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed0/ce_fc0.jsonl",
+      "sha256": "e4ceac17fb1085f23f688aed37666b0e95454e3845299e9390c1a3690209277d",
+      "bytes": 1169,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed0/ce_fc29.jsonl",
+      "sha256": "70ef4d39f9f717a4148e8eb96133948008166c3eb233cc1c9dd77ba550cb75c5",
+      "bytes": 1175,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed0/ce_fc60.jsonl",
+      "sha256": "c60df86ae45fb455b6790f8cd7c5846da2aa276656dce454bf968464dce9aab6",
+      "bytes": 1173,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed0/ce_fc95.jsonl",
+      "sha256": "f28e435a5a299a4b5deb50dbdf535908d87812158a3fa2aa8dc8f939a091be1e",
+      "bytes": 1172,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed1/arcface_fc0.jsonl",
+      "sha256": "282e04fa42f112a124c3b8d3633c55bc7c9f29d5fc7bd9affd018caf76691800",
+      "bytes": 1191,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed1/arcface_fc29.jsonl",
+      "sha256": "643117206df9b3ccfec5cf93a6725d0c61cc6d3dad4ea7b484c7ede29c3fa8c0",
+      "bytes": 1193,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed1/arcface_fc60.jsonl",
+      "sha256": "5dac09d03b21b7f09b9a3b95d0f853883212d48ce1d9c121a9fd311b21e0e09d",
+      "bytes": 1195,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed1/arcface_fc95.jsonl",
+      "sha256": "e422961b0907cd6fd756bd366551031cbc7f15a25f8aa6bb523029f7d579a763",
+      "bytes": 1193,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed1/ce_fc0.jsonl",
+      "sha256": "808d6cb8d8ba0a49e7e1350cbbe02c9b5cdc6cd473e933fe0ced9f7ef5a026d7",
+      "bytes": 1171,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed1/ce_fc29.jsonl",
+      "sha256": "2d0b8076f40e15d093406bb5b22556062bb3d3fe58f36e7d0feddb0e52b74ed2",
+      "bytes": 1174,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed1/ce_fc60.jsonl",
+      "sha256": "8ce9f39c786e46e16231c3ddf4eb6fef4977c74073db4a3463c51d01ad7b56cb",
+      "bytes": 1172,
+      "tracked_in_git": true
+    },
+    {
+      "path": "evidence/k100_seed1/trajectories/seed1/ce_fc95.jsonl",
+      "sha256": "9c44a2e19162f998c423fdeea012fb316b6888b65c8de0265146af5cdb65f406",
+      "bytes": 1172,
+      "tracked_in_git": true
+    }
+  ],
+  "consumed": {
+    "cells": [
+      "seed0/ce_fc0",
+      "seed0/ce_fc29",
+      "seed0/ce_fc60",
+      "seed0/ce_fc95",
+      "seed0/arcface_fc0",
+      "seed0/arcface_fc29",
+      "seed0/arcface_fc60",
+      "seed0/arcface_fc95",
+      "seed1/ce_fc0",
+      "seed1/ce_fc29",
+      "seed1/ce_fc60",
+      "seed1/ce_fc95",
+      "seed1/arcface_fc0",
+      "seed1/arcface_fc29",
+      "seed1/arcface_fc60",
+      "seed1/arcface_fc95"
+    ],
+    "first_zero_epoch": {
+      "seed0/ce_fc0": 1,
+      "seed0/ce_fc29": 2,
+      "seed0/ce_fc60": 1,
+      "seed0/ce_fc95": 1,
+      "seed0/arcface_fc0": 2,
+      "seed0/arcface_fc29": 3,
+      "seed0/arcface_fc60": 1,
+      "seed0/arcface_fc95": null,
+      "seed1/ce_fc0": 1,
+      "seed1/ce_fc29": 1,
+      "seed1/ce_fc60": 1,
+      "seed1/ce_fc95": 1,
+      "seed1/arcface_fc0": 2,
+      "seed1/arcface_fc29": 2,
+      "seed1/arcface_fc60": 1,
+      "seed1/arcface_fc95": 1
+    },
+    "unmarked": [
+      "seed0/arcface_fc95"
+    ],
+    "panels": {
+      "col1": "forget_correct / forget_total (denominator 10, verified)",
+      "col2": "nc3_centred",
+      "col3": "d_nc3_uncentred (change from that cell's own epoch 0)"
+    },
+    "n_cells": 16,
+    "rows_read": 64
+  },
+  "outputs": [
+    {
+      "path": "figures/fig1_k100_trajectories.pdf",
+      "sha256": "ea261fdd4e0c4af29576caf31674fb90a190a5fa83f5b0107930dd520a7e395d"
+    },
+    {
+      "path": "figures/fig1_k100_trajectories.png",
+      "sha256": "39f35995b6e5ffb384fde20f834f3b7b2a0a4588ccbb62be8f4ed6b07a0ee5b8"
+    }
+  ],
+  "notes": [
+    "Strata A (seed 0) and B (seed 1) only; K=100 throughout.",
+    "Uncentred panel plots within-head change only. The two objectives' uncentred baselines sit on opposite sides of zero (CE +0.496 to +0.541, ArcFace -0.899 to -0.889 at epoch 0), so a level comparison on a shared axis is not drawn.",
+    "No imputation: the seed-0 ArcFace identity-00524 cell never reaches 0/10 and receives no attainment marker.",
+    "No uncertainty bars: identities are a within-seed factor."
+  ]
+}

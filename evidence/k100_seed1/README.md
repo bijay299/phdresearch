@@ -77,7 +77,9 @@ itself *selected on attainment in both seeds*.
 ## Known limitations
 
 - **Two seeds are not population-level robustness.** No significance test is
-  computed and none would be supportable.
+  reported, and **no inferential claim is supported by the present analysis** —
+  the identities within a seed are not replicates, and two seeds give no usable
+  variance estimate for a seed effect.
 - **The eight seed-1 cells are four identities × two objectives at one seed** —
   not eight independent replications. Within a seed they share one backbone per
   head, one train/test split, and one baseline checkpoint.

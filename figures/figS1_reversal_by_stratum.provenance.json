@@ -1,0 +1,98 @@
+{
+  "figure_id": "figS1_reversal_by_stratum",
+  "generated_utc": "2026-09-17T19:17:05Z",
+  "execution_revision": {
+    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
+    "dirty": true
+  },
+  "plotting_command": "python scripts/figures/make_figS1.py",
+  "sources": [
+    {
+      "path": "evidence/run_inventory/clfonly_cell_inventory.csv",
+      "sha256": "29638784d5d4ca4c12d33b9c31fee2638d23be2c9360a7569c062e56ae9c6ef2",
+      "bytes": 24160,
+      "tracked_in_git": true
+    }
+  ],
+  "consumed": {
+    "rows": {
+      "A controlled nested sweep | ce": {
+        "n": 12,
+        "reversed_by_epoch1": 0,
+        "reversed_only_by_epoch3": 0,
+        "no_reversal": 12
+      },
+      "A controlled nested sweep | arcface": {
+        "n": 12,
+        "reversed_by_epoch1": 0,
+        "reversed_only_by_epoch3": 0,
+        "no_reversal": 12
+      },
+      "B seed-1 replication | ce": {
+        "n": 4,
+        "reversed_by_epoch1": 0,
+        "reversed_only_by_epoch3": 0,
+        "no_reversal": 4
+      },
+      "B seed-1 replication | arcface": {
+        "n": 4,
+        "reversed_by_epoch1": 0,
+        "reversed_only_by_epoch3": 0,
+        "no_reversal": 4
+      },
+      "C historical faces-1000 | ce": {
+        "n": 4,
+        "reversed_by_epoch1": 0,
+        "reversed_only_by_epoch3": 0,
+        "no_reversal": 4
+      },
+      "C historical faces-1000 | arcface": {
+        "n": 4,
+        "reversed_by_epoch1": 0,
+        "reversed_only_by_epoch3": 0,
+        "no_reversal": 4
+      },
+      "D historical faces-100 | ce": {
+        "n": 4,
+        "reversed_by_epoch1": 0,
+        "reversed_only_by_epoch3": 0,
+        "no_reversal": 4
+      },
+      "D historical faces-100 | arcface": {
+        "n": 4,
+        "reversed_by_epoch1": 1,
+        "reversed_only_by_epoch3": 1,
+        "no_reversal": 2
+      },
+      "E CIFAR-10 context | ce": {
+        "n": 8,
+        "reversed_by_epoch1": 0,
+        "reversed_only_by_epoch3": 0,
+        "no_reversal": 8
+      },
+      "E CIFAR-10 context | arcface": {
+        "n": 8,
+        "reversed_by_epoch1": 8,
+        "reversed_only_by_epoch3": 0,
+        "no_reversal": 0
+      }
+    },
+    "stratum_F_excluded": 5
+  },
+  "outputs": [
+    {
+      "path": "figures/figS1_reversal_by_stratum.pdf",
+      "sha256": "2fb4eec3ebfe372d598ea62aa2a0861a5dfc291e2a81e4e5fe67d7619c96c226"
+    },
+    {
+      "path": "figures/figS1_reversal_by_stratum.png",
+      "sha256": "236261fd8d1bf483d2771f4d423dd14cd5c7fb624793a74a8e1c62eacf189cf4"
+    }
+  ],
+  "notes": [
+    "Supplementary and contextual only; not a main result.",
+    "64 cells plotted; 5 stratum-F repeated observations excluded.",
+    "No pooled headline rate is computed or displayed.",
+    "Each row label carries its own protocol incompatibilities inline."
+  ]
+}
