@@ -32,14 +32,38 @@ contrasts are kept separate and never pooled.**
 
 **Reading conventions used throughout.**
 
-- **NC3 centred** — cosine between the forget class's classifier weight and its
-  class-mean feature, weights centred by the global mean **excluding the forget
-  class**. This is the **only head-comparable** convention. Every reversal
-  claim in this project is centred.
-- **NC3 uncentred** — the same cosine uncentred; the convention the AISTATS
-  prediction is stated in. Reported **only** as a within-head change from that
-  model's own baseline. ArcFace's uncentred baseline is ≈ −0.88 *before any
-  unlearning*, so a negative uncentred value is never by itself a flip.
+- **NC3, exactly as production computes it** (`src/metrics.py: nc3_alignment`).
+  Let `mu[k]` be the class-mean training feature of class *k*, `W[k]` the
+  classifier weight row, and define the **reference population**
+
+      ref = {k : class k is present in the features} \ {forget class}
+
+  i.e. every class with at least one feature, **excluding the forget class**
+  (`exclude_from_centre`). Both centres are taken over that **same** population:
+
+      feature-side centre   g_0 = nanmean_{k in ref} mu[k]
+      weight-side centre    c   = mean_{k in ref} W[k]
+      centred    NC3_k = cos( mu[k] - g_0 ,  W[k] - c )
+      uncentred  NC3_k = cos( mu[k]      ,  W[k]     )
+
+  The cosine L2-normalises each argument internally, so `W` is passed raw
+  (`fc.weight` for CE, `W` for ArcFace; neither row-normalised beforehand) and
+  weight norm does not enter the value. With `centre=False` the centring branch
+  is skipped entirely, so `g_0` and `c` play no part in the uncentred
+  convention. Every reversal claim in this project is **centred**.
+- **What the two conventions can and cannot support.** The two conventions place
+  the same weight rotation at **different baseline angles**, so they have
+  different sensitivity (`d cos / d theta = -sin theta`) and can disagree about
+  whether anything changed. **Descriptive cross-objective comparison of
+  uncentred levels is possible and is reported** — CE baselines sit at +0.51 to
+  +0.72 and ArcFace baselines at −0.878 to −0.895, which is itself a stated
+  observation (C9). The precise restriction is narrower: because the two
+  objectives' weight geometries place them in **different reference frames
+  before any unlearning**, an uncentred **level** difference between objectives
+  **cannot be interpreted as a difference in unlearning quality or in forgetting
+  achieved**. For that purpose use the within-head change from each cell's own
+  epoch 0, and for cross-objective comparison of *change* prefer the centred
+  convention, whose baseline angles are closer together.
 - **Flip / sign reversal** — a sign change for the **same model, same class,
   same convention**, from that model's own baseline. Nothing else earns the word.
 - **DiC** = (NC3_ArcFace,t − NC3_ArcFace,0) − (NC3_CE,t − NC3_CE,0). **Project
@@ -222,10 +246,20 @@ as Gao et al. define it — only for the two measurable quantities named.
 **Claim.** Output forgetting, NC3 metric behaviour, and representation erasure
 are three different things, and this project measures only the first two.
 
-**Evidence.** In every main unlearning cell the backbone is frozen
-(`classifier_only`), so features cannot move by construction — verified in the
-decomposition replay, where the class-mean matrix is **bit-identical** at
-epochs 0–3 in all 24 cells. Separately, the probe metric cannot carry an
+**Evidence, in three tiers of decreasing strength.** (i) **Code path**: in every
+main cell the backbone is held in `eval()` with gradients off and the optimizer
+built over head parameters only, so no backbone parameter or BatchNorm buffer is
+written — state-independent reasoning, and the only tier that applies to *every*
+cell. (ii) **Toy test**: `src/test_dose_schedule.py:511` asserts buffer equality
+after a classifier-only run, but on an untrained `Linear + BatchNorm1d(5)` model,
+not ResNet-18. (iii) **Seed-0 replay**: in the 24 stratum-A cells the
+**class-mean matrix** is bit-identical at epochs 0–3 (sha256 of its float64
+bytes). **That is equality of the 512-dimensional per-class means, not equality
+of every individual feature vector** — it is strong evidence the mapping did not
+move, and is what the decomposition requires, but it is a lower-dimensional
+summary and does not by itself prove per-sample feature equality. **No equivalent
+check exists for seed 1**: those cells saved no state, so direct post-unlearning
+state equality is unavailable there. Separately, the probe metric cannot carry an
 erasure claim: the retrained reference never saw the forget class yet scores
 0.50–1.00 `probe_forget`, because the probe is fitted post hoc on labelled
 examples of that class.
@@ -291,27 +325,52 @@ descriptive fact about the weight, not a driver of `nc3_*_forget`.
 **C6b — the K ordering is a reference-frame effect, in this seed-0
 decomposition.** Centred DiC orders K=100 < 250 < 1000, but:
 
-- **Not reference drift.** Holding the retain-weight centre at epoch 0
-  reproduces the ordering essentially unchanged (+0.0561/+0.1087/+0.1393 vs
-  production +0.0574/+0.1093/+0.1393 at epoch 1). Moving *only* the centre
-  gives +0.0004/+0.0002/+0.0003 — flat, two to three orders of magnitude below
-  production. Largest residual 0.0068 against a largest production change of
-  0.2007.
-- **Not more rotation.** CE's forget weight rotates 17.8°/16.7°/17.4° at
-  epoch 1 — **non-monotone, spanning ~1.8°**.
-- **Where it enters.** The centred frame's reference is `f_0 − g_0`, and
-  `|g_0|/|f_0|` for CE is 0.80/0.73/0.69 at K=100/250/1000. Both the baseline
-  angle (31.9° < 34.2° < 39.1°) and the projected rotation (9.14° < 9.60° <
-  11.32°) increase with K and reinforce; since a cosine's sensitivity to
-  rotation is −sin θ, the ordering follows. The **uncentred** baseline angle is
-  non-monotone (58.0° > 54.1° > 53.2°) and its changes inherit that — which is
-  why the uncentred convention shows **no** K ordering.
-- **Why each head's centre is inert, for opposite reasons.** CE's
-  retain-weight centre is nearly the zero vector (`|c_0|/|w_0|` =
-  0.0248/0.0104/0.0012), so its large angular movement moves the metric by
-  ~1e-4. ArcFace's centre is nearly as long as the weight (0.96–1.01), so
-  centring matters greatly to its *level*, but the centre barely moves
-  (0.02–0.07°) and so contributes nothing to the *change*.
+- **Not reference drift, though the centre is not inert either.** Holding the
+  retain-weight centre at epoch 0 reproduces the ordering essentially unchanged
+  (+0.0561/+0.1087/+0.1393 against production +0.0574/+0.1093/+0.1393 at
+  epoch 1). The **centre-only** contribution to DiC is **small but non-zero**:
+  +0.000413 / +0.000200 / +0.000340 at epoch 1 and +0.000511 / +0.000626 /
+  +0.001007 at epoch 3, i.e. two to three orders of magnitude below production.
+  Across **all 24 cells and all four epochs** the largest single-cell
+  |centre-only| is **0.006460** and the largest |residual| **0.006797**, against
+  a largest |production| of **0.200685** — *those three are all-epoch extrema,
+  not epoch-1 values.*
+- **Not more rotation at larger K.** CE's forget-weight rotation in **K order**
+  is 17.8148° / 16.7366° / 17.4080° at epoch 1 — **non-monotone, spanning
+  1.0782°** — and 22.6002° / 20.7862° / 21.4885° at epoch 3, spanning 1.8140°,
+  also non-monotone. (An earlier draft quoted the epoch-3 span as if it were
+  epoch 1's.)
+- **Where the ordering enters — the angle domain, read in K order.** For CE at
+  epoch 1:
+
+| K | uncentred θ₀ | uncentred Δθ | sin θ₀ | uncentred ΔNC3 | centred θ₀ | centred Δθ | centred ΔNC3 |
+|---|---|---|---|---|---|---|---|
+| 100 | 57.97° | 17.77° | 0.8478 | −0.2841 | 31.93° | 9.15° | −0.0948 |
+| 250 | 53.21° | 16.69° | 0.8008 | −0.2552 | 34.15° | 9.60° | −0.1053 |
+| 1000 | 54.07° | 17.35° | 0.8097 | −0.2681 | 39.05° | 11.32° | −0.1378 |
+
+  In the **centred** frame both the baseline angle (31.93 < 34.15 < 39.05) and
+  the projected rotation (9.15 < 9.60 < 11.32) **increase monotonically with K**
+  and push the same way, so centred ΔNC3 orders monotonically
+  (−0.0948, −0.1053, −0.1378).
+
+  In the **uncentred** frame the rotation Δθ is essentially flat
+  (17.77 / 16.69 / 17.35, matching the weight rotation above), and the baseline
+  angle θ₀ is **non-monotone in K — it falls from 100 to 250 and rises again at
+  1000** (57.97 / 53.21 / 54.07). Since a cosine's sensitivity to rotation is
+  `−sin θ`, and sin θ₀ inherits that shape (0.8478 / 0.8008 / 0.8097), the
+  uncentred changes inherit it too (−0.2841 / −0.2552 / −0.2681). **That is why
+  the uncentred convention shows no K ordering: its baseline angle is not
+  monotone in K, not because the underlying rotation differs.** (An earlier
+  draft listed these angles sorted by magnitude rather than by K, which made a
+  non-monotone sequence read as a decreasing one.)
+- **Why each objective's centre moves the metric so little, for different
+  reasons.** CE's retain-weight centre is nearly the zero vector
+  (`|c_0|/|w_0|` = 0.0248 / 0.0104 / 0.0012), so even a sizeable rotation of it
+  (7.34° / 6.73° / 14.55° at epoch 1) moves the metric by ~1e-4. ArcFace's
+  centre is nearly as long as the weight (0.96–1.01), so centring matters
+  greatly to its *level*, but the centre barely rotates at all (0.0049° /
+  0.0210° / 0.0210° at epoch 1), so it contributes little to the *change*.
 
 **C6c — what the nested sweep does and does not control.** The sweep is a
 **controlled nested class-count comparison, not an isolated causal intervention
@@ -335,10 +394,27 @@ backbone, the schedule, and the four forget identities.
 (~10× more images from K=100 to K=1000), the number of retain optimisation steps
 per epoch (31 / 77 / 303) and hence the number of retain updates between
 consecutive forget steps and their spacing within an epoch, **candidate** forget
-exposure (1,240 / 3,080 / 12,120 per epoch), BatchNorm exposure, and the
-difficulty of the underlying classification problem. A K comparison therefore
-moves a bundle of correlated quantities, and no cell in this project separates
-them.
+exposure (1,240 / 3,080 / 12,120 per epoch), and the difficulty of the
+underlying classification problem. A K comparison therefore moves a bundle of
+correlated quantities, and no cell in this project separates them.
+
+**BatchNorm, stated precisely — the two phases differ.** During **baseline
+training** the backbone is in train mode, so BatchNorm running statistics are
+updated, and larger K means more batches and a different data distribution: the
+trained backbones therefore differ across K, and this is part of what "the
+training population changes" means. During **classifier-only unlearning** the
+backbone is held in `eval()` mode, so BatchNorm uses its stored running
+statistics and **does not update them** — no BatchNorm exposure accrues in the
+unlearning phase at any K. Earlier drafts listed "BatchNorm exposure" among the
+things varying with K without separating the phases; only the baseline-training
+phase is meant.
+
+**Scope of "frozen backbone".** Freezing is **within each cell**: a cell's
+backbone is identical at its own epochs 0–3. It does **not** mean the backbone
+is the same across cells. Each (K, objective) pair has its **own separately
+trained backbone**, so trained weights are not held identical across K or across
+objectives, and cross-K or cross-objective comparisons of *levels* rest on
+different feature extractors.
 
 **Does not assert.** That class count changes forget-class erasure. The
 ordering rests on **three** K points (K=500 absent — it failed the 2.00pp
@@ -408,7 +484,8 @@ zero at epoch 1 in 11 of 12 cells; ArcFace is slower in 7/12, faster in 1
 objective.
 
 **Does not assert.** A rate or a speed ratio. Four identities on an integer
-epoch grid of {1, 2, 3}, at 0.1 accuracy granularity, cannot support one.
+epoch grid of {1, 2, 3}, on a **ten-image** forget-class evaluation (0.1
+granularity at K=100), cannot support one.
 
 ---
 
@@ -444,18 +521,24 @@ weight (`|c_0|/|w_0|` ≈ 0.96–1.01) while CE's is nearly the zero vector
 This is a **measured correlate in one seed on one lineage**, not a demonstrated
 cause, and no seed-1 decomposition exists to corroborate it.
 
-**Consequence for the write-up.** Raw uncentred NC3 must never be compared
-across heads. This is the single most likely reviewer trap in the paper, and
+**Consequence for the write-up.** An uncentred **level** difference between
+objectives must not be read as a difference in unlearning quality — the
+objectives begin in different reference frames. Describing the offset itself,
+as this claim does, is legitimate and necessary. This is the single most likely reviewer trap in the paper, and
 the guard belongs in the methods section, not a footnote.
 
 ---
 
-### C10. Probe gaps separate the objectives on CIFAR-10 but not in either face setting, and the two face settings differ from each other
+### C10. The positive CIFAR ArcFace-minus-CE probe-gap pattern does not recur in the face settings
 
-**Claim.** `probe_gap_to_retrain*` separates the two objectives on CIFAR-10 and
-does not in either face setting. Reported descriptively across settings: the
-design does not isolate why, since domain, resolution, class count, images per
-identity, identity membership and test-set denominator all covary.
+**Claim.** On CIFAR-10 the paired ArcFace-minus-CE `probe_gap_to_retrain*`
+difference is positive in 4 of 4 classes (mean +0.2405). **That pattern does
+not recur in either face setting**: on faces-1000 the paired differences are
+**non-positive in all four identities** (3 negative, 1 exactly zero, mean
+−0.0750), and on the historical faces-100 lineage they are **mixed in sign** (2
+positive, 2 negative, mean −0.0134). Reported descriptively across settings:
+the design does not isolate why, since domain, resolution, class count, images
+per identity, identity membership and test-set denominator all covary.
 
 **Evidence** (macro mean over 4 classes/identities, seed 0, n=4 per group):
 
@@ -468,16 +551,33 @@ identity, identity membership and test-set denominator all covary.
 | faces-1000 CE | +0.0250 | 0.0957 | 2/1/1 | 40 |
 | faces-1000 ArcFace | −0.0500 | 0.1291 | 1/1/2 | 40 |
 
-Paired ArcFace-minus-CE: CIFAR +0.2405 (4/4 positive); faces-100 −0.0134 (2
-positive, 2 negative); faces-1000 −0.0750 (0 positive, 1 exact zero, 3
-negative).
+Paired ArcFace-minus-CE, computed from exact integer counts over each
+identity's own denominator (a float subtraction renders the faces-1000 fc794
+rational zero as a spurious negative):
 
-**Does not assert.** Representation erasure — the probe is fitted post hoc on
+| setting | values | mean | pos / zero / neg |
+|---|---|---|---|
+| CIFAR-10 | +0.2600, +0.3020, +0.2110, +0.1890 | **+0.2405** | 4 / 0 / 0 |
+| faces-100 | +0.1852, −0.1600, +0.0323, −0.1111 | −0.0134 | **2 / 0 / 2 (mixed)** |
+| faces-1000 | −0.1000, −0.1000, −0.1000, 0.0000 | −0.0750 | **0 / 1 / 3 (non-positive)** |
+
+The faces-1000 fc794 value is a **rational zero** — both objectives give
+exactly +1/10 there (CE 8/10 vs 7/10; ArcFace 6/10 vs 5/10) — and is recorded as
+`0.0000`, not as a signed near-zero.
+
+**Does not assert.** **Equivalence of the objectives in the face settings, or
+the absence of a difference there** — faces-1000's paired differences are
+uniformly non-positive and faces-100's are mixed, which is *not* the same as
+"no difference"; what does not recur is specifically CIFAR's **positive**
+pattern. **No formal significance** is claimed or computable here: n=4
+non-independent identities per group, one seed, and denominators of 10 (faces-1000)
+or 25–31 (faces-100). Representation erasure — the probe is fitted post hoc on
 labelled forget-class examples, and the unlearning backbone is frozen so there
 is no feature change to detect. A negative gap is a statement about the
 *reference*, not about better unlearning. Resolution differs by group
 (CIFAR ~1000 test images/class; faces-100 25–31; faces-1000 and K=100 exactly
-**10**, so every face gap is a whole-image step). The two face subsets are
+**10**, so gaps there move in whole-image steps of 0.1, while faces-100's
+25–31 give steps of 0.032–0.040). The two face settings are
 reported separately and **never combined**.
 
 ---
@@ -525,11 +625,16 @@ decision for Dr Rawat, and would need the outstanding novelty searches first.
 2. **The two conventions disagree under an exact flip** — uncentred −1.00,
    centred −0.71 on the same model. Both must be reported with the convention
    stated.
-3. **Class-mean estimation at n≈40 is not the limiting factor.** Recomputing
-   CIFAR's epoch-1 flip from 40-image class means over 20 trials gives mean
-   −0.9008, SD 0.0575, 0/20 sign flips; face non-flips likewise survive
-   half-pool subsampling (+0.94 to +0.98). The face/CIFAR divergence is real,
-   not a starved estimator.
+3. **Observed stability of NC3 under class-mean subsampling, in the runs
+   tested.** Recomputing CIFAR's epoch-1 value from 40-image class means over 20
+   trials gave mean −0.9008, SD 0.0575, with 0/20 sign changes; the tested face
+   models' non-flips likewise persisted under half-pool subsampling (+0.94 to
+   +0.98). **Scope:** this establishes stability **only for the specific runs
+   tested** (fc0, seed 0, epoch 1, on CIFAR-10, faces-100 and faces-1000) under
+   **those particular subsampling procedures and trial counts**. It does not
+   rule out estimator noise as a contributor in untested cells, and it does not
+   establish that estimator noise is "not the limiting factor" anywhere else.
+   The other seven face identities rest on a single recorded trajectory each.
 4. **A cosine-schedule `T_max` truncation** silently left every warmup run
    (i.e. every ArcFace run) on an incomplete schedule, ending at lr 0.00670
    rather than 0.00000. Fixing it moved CIFAR ArcFace seed-1 test accuracy
@@ -545,7 +650,7 @@ State these as scope, not as apology. Each is blocked by a specific, named gap.
 
 | not claimable | why |
 |---|---|
-| **Any representation-erasure claim** | Backbone frozen in every main cell; class means bit-identical across epochs. The probe metric measures post-hoc linear decodability after fitting on labelled forget-class examples, not erasure. |
+| **Any representation-erasure claim** | Backbone frozen in every main cell (code path); seed-0 replay shows class means bit-identical across epochs — a per-class summary, **not** per-feature equality — and no such check exists for seed 1. The probe metric measures post-hoc linear decodability after fitting on labelled forget-class examples, not erasure. |
 | **Class-count causality** | C6 rules out the obvious mechanism and identifies a measurement-geometry origin; K covaries with retain-set size, step counts, active-step spacing, BN exposure and task difficulty. K=500 is absent. |
 | **Inferential claims from the current design** | No statistical test is reported anywhere, and the tests a reader would reach for are **inappropriate for this design**, not merely unrun: treating the four identities as independent replicates is invalid (within a seed they share one backbone per head, one split, one baseline checkpoint), and two seeds give no usable variance estimate for a seed effect. Descriptive means, ranges and sign counts are reported instead. This is a statement about **what these data can support**, not that no test could ever be computed on any design — a properly powered study with independent seeds as the replication unit, and identities as a within-seed factor, would admit standard inference. |
 | **Within-identity generalisation to unlearner-withheld *training* images** | See the dedicated note below — the test-split evaluation that *does* exist must not be confused with the `split_mode=subset` protocol that does not. |
@@ -571,7 +676,9 @@ is likewise 10, and on the historical faces-100 lineage 25–31. Every
 `output_forget`, `output_retain` and `probe_forget` number in this project is
 measured there. So the project **does** carry a **limited assessment of
 within-identity generalisation to unseen images of the forgotten identity** —
-limited by the denominator (10 images is 0.1 granularity), by n=4 identities,
+limited by the denominator (**10 images gives 0.1 granularity at K=100,
+faces-1000 and the nested sweep; the historical faces-100 lineage has 25–31 test
+images per identity, i.e. steps of 0.032–0.040**), by n=4 identities,
 and by the frozen backbone, but real, and it is the basis of every attainment
 claim in C1.
 
@@ -606,13 +713,17 @@ Any analysis that treats them as independent would overstate precision.
 
 **Metric resolution.** Test images per forget identity: CIFAR-10 ~1000 per
 class; faces-100 25–31; **faces-1000 and the nested sweep exactly 10**. On the
-face sets `output_forget` and `probe_forget` move in whole-image steps of 0.1,
+ten-image evaluations (faces-1000 and the nested sweep) `output_forget` and
+`probe_forget` move in whole-image steps of **0.1**; on faces-100's 25–31 images
+the step is **0.032–0.040**, still coarse but not 0.1,
 and "zero" means 0/10. `nc3_*_forget` reads ~40 training images and is not
 resolution-limited in the same way (C12.3).
 
-**Epoch convention is still unresolved** — see Part IV. It materially changes
-headline numbers: on faces-100 the ArcFace reversal count is 1/4 at epoch 1 and
-2/4 at epoch 3.
+**Epoch sensitivity is real and is handled by policy, not left open.** Under the
+settled policy (epoch 1 anchor, later epochs as sensitivity, counts always
+quoted at a stated epoch) the numbers still move with epoch and must be read
+with the epoch attached: on faces-100 the ArcFace reversal count is **1/4 at
+epoch 1 and 2/4 by epoch 3**.
 
 **Provenance tiers are not uniform.** Most runs are clean-tree, config-tracked,
 commit-recorded. But: the faces-1000 ArcFace baseline ran with `--set
@@ -641,27 +752,34 @@ lets the K=100 numbers be verified; it does not let the runs be reproduced.
 
 ---
 
-## Part IV — Decisions blocking the write-up
+## Part IV — Settled decisions, and what remains open
 
-These are for Dr Rawat, not for the execution agent, and they interlock.
+### Settled by the research lead — not to be reopened
 
-1. **Which epoch convention is primary?** Epoch 1 (matched output forgetting —
-   what every CIFAR claim used) or end of the unlearning budget. Standing
-   recommendation is epoch 1 primary with the final epoch as sensitivity, but
-   it has never been settled. **It must be fixed once and applied to CIFAR,
-   faces-1000, faces-100 and the nested sweep alike.** Open since 2026-09-14.
-2. **Is a qualified negative result the paper?** The plausible paper is now
-   "the mechanism is loss- and geometry-sensitive, and the classifier shortcut
-   is not closed by angular margin", plus the mechanism analysis in C5/C6. Not
-   "margin losses close the shortcut". Confirm before more compute.
-3. **The two outstanding novelty searches** (ACM DL; Semantic Scholar
-   citation-graph on the AISTATS paper and on *Neural Collapse by Design*).
-   No novelty claim may be written first. Note the competitive risk: the
-   *Neural Collapse by Design* group works on normalised-loss geometry and
+1. **Framing** — qualified negative result plus mechanism analysis, with the
+   central framing quoted at the top of this document.
+2. **Evidence hierarchy** — the controlled face evidence (strata A and B) plus
+   the seed-0 decomposition is the core; historical face and CIFAR results are
+   explicitly qualified context; incompatible lineages are never pooled.
+3. **Epoch policy** — show full recorded trajectories; **epoch 1 is the
+   decomposition anchor**, later epochs are sensitivity; historical reversal
+   counts are always quoted at a stated epoch.
+4. **Comparison rules** — fixed-epoch and own-attainment contrasts stay
+   separate and are never pooled.
+5. **Figure set** — three main figures plus one contextual supplementary, as
+   specified in `notes/figure_specs.md`.
+
+### Genuinely open
+
+1. **The two outstanding novelty searches** — ACM DL, and a Semantic Scholar
+   citation-graph pass on the AISTATS paper and on *Neural Collapse by Design*
+   (arXiv:2605.20302). **No novelty claim may be written before both are done.**
+   Competitive risk stands: that group works on normalised-loss geometry and
    cites the face-margin family explicitly.
-4. **Scope for the remaining time** — explain or broaden. Any additional seed
-   or K value requires a new research decision tied to a specific unresolved
-   claim, per the standing handoff.
+2. **Whether any C12 item is framed as a contribution** — depends on (1).
+3. **Whether to spend remaining time explaining or broadening.** Any additional
+   seed or K value requires a new research decision tied to a specific
+   unresolved claim, per the standing handoff. Nothing is authorized now.
 
 ---
 

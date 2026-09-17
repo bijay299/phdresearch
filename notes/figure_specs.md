@@ -117,27 +117,47 @@ dimensionless, range 0.75–1.05, with a horizontal reference line at 1.0.
 Same series and per-identity point treatment. Annotate that norm is
 **scale-invariant to the cosine** and is descriptive only.
 
-**Panel C — decomposition of ΔArcFace − ΔCE, centred, epoch 1.** Grouped bars
-at K = 100, 250, 1000. Four bars per group, in this order: production
-`A(w_t, c_t)`; centre fixed at epoch 0 `A(w_t, c_0)`; weight fixed at epoch 0
-`A(w_0, c_t)`; interaction residual. y = Δcosine, 0 to +0.15 with the residual
-allowed to go slightly negative. Label the third and fourth bars in-panel as
-"≈ 0". An inset or second y-axis may carry `|g_0| / |f_0|` for CE
-(0.80 / 0.73 / 0.69) as a line, since that is where the ordering enters.
+**Panel C — decomposition of the centred DiC at epoch 1.** Every bar is a
+**baseline-subtracted counterfactual difference-in-changes**, not a raw cosine.
+Writing `A(w, c) = cos(f_0 − g_0, w − c)` for the production centred NC3 of the
+forget row, each quantity is first a **change from that cell's own epoch-0
+corner** and then an ArcFace-minus-CE difference:
+
+    Δ_production  = A(w_t, c_t) − A(w_0, c_0)
+    Δ_weight-only = A(w_t, c_0) − A(w_0, c_0)      (centre held at epoch 0)
+    Δ_centre-only = A(w_0, c_t) − A(w_0, c_0)      (weight held at epoch 0)
+    residual      = A(w_t,c_t) − A(w_t,c_0) − A(w_0,c_t) + A(w_0,c_0)
+                  = Δ_production − Δ_weight-only − Δ_centre-only
+
+    bar height    = (that quantity for ArcFace) − (same quantity for CE)
+
+The residual line **must appear in the caption or panel**, because it is what
+makes the four bars an exact identity rather than an additive attribution.
+
+Grouped bars at K = 100, 250, 1000; four bars per group in the order
+Δ_production, Δ_weight-only, Δ_centre-only, residual. y = Δcosine, 0 to +0.15,
+allowing the small bars to go slightly negative. Do **not** label the third and
+fourth bars "≈ 0" — label them with their values, which are **small but
+non-zero** (centre-only +0.000413 / +0.000200 / +0.000340; residual +0.000955 /
++0.000395 / −0.000285 at epoch 1).
+
+`|g_0| / |f_0|` for CE (0.80 / 0.73 / 0.69) may be shown **only as a clearly
+labelled inset with its own axis and title** — **not** as a secondary y-axis on
+the bar panel, which would invite reading a ratio against a Δcosine scale.
 
 **Missing-outcome handling — K = 500.** The tick appears; the data region is
 empty; **no line connects across it.** Annotate with the verified gate record
 read from `logs_classcount/K500/faces_{ce,arcface}_seed0/results.jsonl`:
 
 > K = 500 baselines: CE **68.9676 %**, ArcFace **71.3232 %**, absolute gap
-> **2.3556 pp**, exceeding the pre-registered 2.00 pp head-fairness gate. Its
+> **2.3556 pp**, exceeding the prespecified 2.00 pp head-fairness gate. Its
 > unlearning cells were never run and neither head was retuned to rescue it.
 > Both baselines are retained as artifacts.
 
 State that the gate is **symmetric** and failed because ArcFace **exceeded** CE,
 not because ArcFace underperformed. Do not omit the tick, do not impute a value,
 and do not describe K=500 as "missing data" — it is a deliberate exclusion under
-a pre-registered rule.
+a prespecified rule.
 
 **Draft caption.** *Seed-0 reference-frame decomposition of centred NC3 over the
 24 controlled nested-sweep cells. (A) Forget-class weight rotation from epoch 0:
@@ -146,8 +166,11 @@ is essentially flat in K. (B) Forget-weight norm ratio: CE contracts to
 0.83–0.87, ArcFace holds 0.996–1.001; norm does not enter the cosine and is
 shown as description only. (C) Holding the retain-weight centre at epoch 0
 reproduces the K ordering almost exactly, while moving only the centre
-reproduces nothing and the interaction residual stays below 0.007 against a
-largest production change of 0.201 — so the ordering is sensitivity of centred
+reproduces only a small non-zero contribution (+0.0002 to +0.0010 at epoch 1),
+with the interaction residual of the same order. **Across all 24 cells and all
+four epochs** — a wider scope than this epoch-1 panel — the largest single-cell
+|centre-only| is 0.0065 and the largest |residual| 0.0068, against a largest
+|production| of 0.2007. So the ordering is sensitivity of centred
 NC3 to a fixed reference frame that varies with K, not increasing classifier
 rotation. Points are individual identities, not replicates. K = 500 carries no
 unlearning cells.*
@@ -198,14 +221,24 @@ convention. Above each point, annotate the exposure pair as `CE ep / Arc ep`
   epochs (+0.0271, +0.0246, +0.0173). The sign disagreement between the two
   contrast rules is the point of the figure.
 - In Panel B, identity **00524 at seed 0** has **no point**: ArcFace never
-  reached 0/10, so no attained pair exists. Mark the slot with an open cross and
-  the in-panel label "no attained pair". **Do not substitute epoch 3, do not
+  reached 0/10, so no attained pair exists. **Do not substitute epoch 3, do not
   interpolate, and do not compute a contrast for it.**
 
-**Missing-outcome handling.** As above — the absent seed-0/00524 point is drawn
-as explicitly absent. Any mean shown in Panel B must state its n (seed 0: n = 3;
-seed 1: n = 4) directly in the panel, or be omitted entirely; a cross-seed mean
-comparison over different identity sets must not be drawn without that label.
+**Missing-outcome handling.** The absent seed-0 / 00524 observation is marked
+with an open cross **at the axis margin, outside the numerical data region** —
+in the x-axis tick area or a dedicated annotation gutter below the plotting
+frame — with the label "no attained pair". It must **not** be drawn at any y
+position inside the data region, because a glyph placed at a y-value reads as a
+measured value; at y = 0 it would read as a contrast of zero.
+
+**Panel B carries no means.** Seed 0 has 3 attained identities and seed 1 has 4,
+so any cross-seed mean would compare different identity sets, and restricting to
+the common set {0, 29, 60} conditions on attainment in both seeds. **Plot the
+individual attained contrasts only**; if a summary is wanted it belongs in the
+text with its n and its selection rule stated, not on this panel. Panel A's
+four-identity means are retained — the identity set is complete and identical
+there — drawn as a heavier line, labelled "descriptive mean", and **without any
+band, error bar or shaded interval**.
 
 **Draft caption.** *Two contrast rules on the same K=100 cells, at two pipeline
 seeds. (A) Fixed-epoch DiC = ΔArcFace − ΔCE at a common epoch; the
@@ -262,8 +295,9 @@ epoch 1 and by epoch 3. Reversal frequency ranges from 8/8 (CIFAR-10, ArcFace)
 to 0/12 (controlled nested sweep, ArcFace) across settings that differ
 simultaneously in domain, input resolution, class count, dose protocol and
 test-set resolution. **These settings are not protocol-comparable and the
-figure is contextual only**; the single comparison in this project that varies
-one factor is the nested sweep across K, which shows no reversals at any K.*
+figure is contextual only**; the most controlled comparison in the project is
+the nested class-count sweep, which shows no reversals at any K — though it too
+moves a bundle of correlated quantities with K, not K alone.*
 
 **Must not imply.** That the ordering of rows is a dataset effect, a class-count
 effect, or an effect of the objective. That the strata can be pooled into an
