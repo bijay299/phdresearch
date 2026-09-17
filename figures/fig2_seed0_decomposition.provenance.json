@@ -1,11 +1,14 @@
 {
   "figure_id": "fig2_seed0_decomposition",
-  "generated_utc": "2026-09-17T19:24:18Z",
+  "generated_utc": "2026-09-17T20:32:33Z",
+  "render_width_inches": 7.0,
   "execution_revision": {
-    "commit": "9689c8be864d3ff0d477f221c68485a7e142cc40",
-    "dirty_excluding_figure_outputs": false,
-    "pending_paths": []
+    "rendered_at_commit": "bd7417309b93bedc9176b408867d2f049ce391a1",
+    "inputs_clean_excluding_generated_outputs_under_figures": true,
+    "uncommitted_non_output_paths_at_render_time": [],
+    "delivery_commit": "not recorded here: the commit containing these rendered files is a descendant of rendered_at_commit, since the outputs cannot be committed until after they exist. verify_figures.py checks that HEAD is rendered_at_commit or a descendant."
   },
+  "caption": "Seed-0 reference-frame decomposition of centred NC3 over the 24 controlled nested class-count sweep cells. No seed-1 decomposition exists, so nothing here is a two-seed result. (A) Forget-class weight rotation from epoch 0. Per-K means place CE at 16.74 to 17.81 degrees at epoch 1 against ArcFace's 3.28 to 4.74 degrees; the per-cell ranges are 16.24 to 18.56 and 2.52 to 5.05 degrees. CE's rotation is non-monotone in K and nearly flat. (B) Forget-weight norm ratio: CE contracts to 0.8129 to 0.8778 across epochs 1 and 3, ArcFace holds 0.9963 to 1.0016. These ratios are descriptive. A cosine is invariant to scaling its whole argument, so the uncentred cosine is unaffected by the weight norm; the centred cosine takes w - c, and changing w against a fixed c can change that direction. No counterfactual on the norm was run, so no attribution from these ratios to the metric is claimed. (C) Each bar is a baseline-subtracted counterfactual difference-in-changes, ArcFace minus CE, of the production centred NC3 A(w, c) = cos(f0 - g0, w - c): production is A(w_t, c_t) - A(w_0, c_0); weight-only holds the retain-weight centre at epoch 0; centre-only holds the weight at epoch 0; and the residual is production minus weight-only minus centre-only, exactly, per cell. Holding the centre at epoch 0 reproduces the K ordering almost exactly, while moving only the centre contributes +0.000200 to +0.000413 at epoch 1, with the residual of the same order. At epoch 3 the centre-only term reaches +0.001007, and across all 24 cells and all epochs the largest single-cell centre-only magnitude is 0.006460 and the largest residual 0.006797, against a largest production magnitude of 0.200685. So the ordering is the sensitivity of centred NC3 to a reference frame that varies with K, not increasing classifier rotation. The four corners are an arithmetic decomposition of the metric, not an intervention on training; the residual is a leftover rather than an interaction effect, since A is nonlinear in both arguments. None of these quantities measures unlearning quality. Points are individual identities, a within-seed factor rather than replicates, so means are descriptive and no dispersion is drawn. The sweep does not isolate K: changing K also changes the head's output width, the training population (3,926 to 38,815 train images), retain steps per epoch (31, 77, 303), candidate forget exposure (1,240, 3,080, 12,120 per epoch), baseline-training BatchNorm exposure (the unlearning phase runs the backbone in eval mode and accrues none), and task difficulty; only the active forget presentations, 360 per epoch, are held fixed. K = 500 carries no unlearning cells and is marked as excluded in every panel with a K axis, including the inset. Its baselines were CE 68.9676 % and ArcFace 71.3232 %, an absolute gap of 2.3556 pp against a prespecified 2.00 pp head-fairness gate. The gate is symmetric and failed because ArcFace exceeded CE, not because ArcFace underperformed; neither head was retuned to rescue it and both baselines are retained as artifacts. This is a deliberate exclusion under a prespecified rule rather than missing data: no value is imputed and no line is drawn across the gap in any panel.",
   "plotting_command": "python scripts/figures/make_fig2.py --from-artifact",
   "sources": [
     {
@@ -77,19 +80,21 @@
   "outputs": [
     {
       "path": "figures/fig2_seed0_decomposition.pdf",
-      "sha256": "bd1a269ee1eb0fc6a9ef03abfbb8e7e7473ea60d9b36686ca36b51fae5c1aa07"
+      "sha256": "5958b5b73d11b958ceff55670802b0744622f2c5f6df56e39e88c9b8d3f71d51"
     },
     {
       "path": "figures/fig2_seed0_decomposition.png",
-      "sha256": "10c7475b84c4d48590b0a89cb12e277daad00e93b15384b5af1f1e7263dfcc7f"
+      "sha256": "a2f85801e29de533193d7e4f1712e96b6190a64ecbf747f7d33dd3bb9d48d8fe"
     }
   ],
   "notes": [
     "Tracked table verified bit-equal to the artifact tree for every field consumed.",
     "Seed 0 only. Stratum A, 24 cells, K in {100, 250, 1000}.",
-    "K=500 tick is drawn with an empty data region; no connecting line spans it in any panel.",
+    "K=500 is marked as excluded in panels A, B, C and the inset; no value is imputed and no line spans it.",
+    "The feature-centre-ratio inset shows points only, with no connecting line: three K points do not establish a trend.",
     "Panel C bars are baseline-subtracted counterfactual differences-in-changes of the metric, not causal contributions and not a measure of unlearning quality.",
-    "Small bars are labelled with their values; none is labelled '0'.",
-    "No error bars anywhere: identities within a seed share one backbone per head, one split and one baseline checkpoint."
+    "Centre-only and residual values are printed with the 1e-3 scale stated; the bars themselves remain to scale.",
+    "No error bars: identities within a seed share one backbone per head, one split and one baseline checkpoint.",
+    "The gate record and the geometric caveats live in the caption."
   ]
 }

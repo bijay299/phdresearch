@@ -1,11 +1,14 @@
 {
   "figure_id": "fig1_k100_trajectories",
-  "generated_utc": "2026-09-17T19:24:15Z",
+  "generated_utc": "2026-09-17T20:32:31Z",
+  "render_width_inches": 7.0,
   "execution_revision": {
-    "commit": "9689c8be864d3ff0d477f221c68485a7e142cc40",
-    "dirty_excluding_figure_outputs": false,
-    "pending_paths": []
+    "rendered_at_commit": "bd7417309b93bedc9176b408867d2f049ce391a1",
+    "inputs_clean_excluding_generated_outputs_under_figures": true,
+    "uncommitted_non_output_paths_at_render_time": [],
+    "delivery_commit": "not recorded here: the commit containing these rendered files is a descendant of rendered_at_commit, since the outputs cannot be committed until after they exist. verify_figures.py checks that HEAD is rendered_at_commit or a descendant."
   },
+  "caption": "Classifier-only random-label unlearning at K = 100: all four forget identities, both objectives, at two pipeline seeds (m = 9 active forget steps per epoch, lambda = 1, three epochs, backbone frozen in eval mode throughout, so no backbone parameter or BatchNorm buffer is updated during unlearning). Left: forget-class test accuracy over the 10 held-out images of that identity. Centre: centred NC3 for the forget class, with the forget class excluded from the centring reference; no cell crosses zero at either seed, and there are no sign reversals across any of the 16 cells. Right: uncentred NC3 as a change from each cell's own epoch 0, because the two objectives' uncentred baselines sit on opposite sides of zero (CE +0.4963 to +0.5409, ArcFace -0.8990 to -0.8892 at epoch 0); plotting the change rather than the level is a presentation choice following from that, not a bar on descriptive comparison of the baselines themselves. The strip beneath each seed gives the first epoch at which each cell reached 0 of 10; 15 of the 16 cells reach it within the three-epoch budget, and ArcFace identity 00524 at seed 0 does not (1 of 10 at epoch 3), which is marked 'none' and is not imputed, substituted or interpolated. The dashed rule at epoch 1 marks the decomposition anchor used in Figure 2; epochs 2 and 3 are sensitivity. Lines are individual identities, which within a seed share one backbone per head, one train/test split and one baseline checkpoint. They are a within-seed factor rather than replicates, so no dispersion is shown and none would be interpretable. Zero output accuracy is not representation erasure: the backbone is frozen here, so these cells do not test whether the identity remains recoverable from the features, and NC3 does not measure unlearning quality.",
   "plotting_command": "python scripts/figures/make_fig1.py",
   "sources": [
     {
@@ -148,13 +151,14 @@
       "seed1/arcface_fc60": 1,
       "seed1/arcface_fc95": 1
     },
-    "unmarked": [
+    "not_attained": [
       "seed0/arcface_fc95"
     ],
     "panels": {
-      "col1": "forget_correct / forget_total (denominator 10, verified)",
+      "col1": "forget_correct out of forget_total (denominator 10, verified)",
       "col2": "nc3_centred",
-      "col3": "d_nc3_uncentred (change from that cell's own epoch 0)"
+      "col3": "d_nc3_uncentred (change from that cell's own epoch 0)",
+      "strip": "first post-baseline epoch with 0/10 correct, per cell"
     },
     "n_cells": 16,
     "rows_read": 64
@@ -162,17 +166,18 @@
   "outputs": [
     {
       "path": "figures/fig1_k100_trajectories.pdf",
-      "sha256": "2eb1c010e887baccade688f418c6f90e2ab35ffba76e7480e1dc6b9b3bbad6cb"
+      "sha256": "dccbdae71dd24bc925d54f086a55bcf94f4b77c8152287c53ec5f396cafee893"
     },
     {
       "path": "figures/fig1_k100_trajectories.png",
-      "sha256": "39f35995b6e5ffb384fde20f834f3b7b2a0a4588ccbb62be8f4ed6b07a0ee5b8"
+      "sha256": "358744f381a5a4065342bfb1f531254bd9f55a1cca3e20196b166e16bf42f2b8"
     }
   ],
   "notes": [
     "Strata A (seed 0) and B (seed 1) only; K=100 throughout.",
-    "Uncentred panel plots within-head change only. The two objectives' uncentred baselines sit on opposite sides of zero (CE +0.496 to +0.541, ArcFace -0.899 to -0.889 at epoch 0), so a level comparison on a shared axis is not drawn.",
-    "No imputation: the seed-0 ArcFace identity-00524 cell never reaches 0/10 and receives no attainment marker.",
-    "No uncertainty bars: identities are a within-seed factor."
+    "Attainment is shown in a per-seed identity x objective strip, not as markers on the trajectory, because several cells reach 0/10 at the same epoch and stacked markers were unreadable.",
+    "No imputation: the seed-0 ArcFace identity-00524 cell is marked 'none' rather than given a substituted epoch.",
+    "No uncertainty bars: identities are a within-seed factor.",
+    "Explanatory prose and caveats live in the caption, not the image."
   ]
 }

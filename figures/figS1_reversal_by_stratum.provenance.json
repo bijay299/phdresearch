@@ -1,11 +1,14 @@
 {
   "figure_id": "figS1_reversal_by_stratum",
-  "generated_utc": "2026-09-17T19:24:21Z",
+  "generated_utc": "2026-09-17T20:32:36Z",
+  "render_width_inches": 7.0,
   "execution_revision": {
-    "commit": "9689c8be864d3ff0d477f221c68485a7e142cc40",
-    "dirty_excluding_figure_outputs": false,
-    "pending_paths": []
+    "rendered_at_commit": "bd7417309b93bedc9176b408867d2f049ce391a1",
+    "inputs_clean_excluding_generated_outputs_under_figures": true,
+    "uncommitted_non_output_paths_at_render_time": [],
+    "delivery_commit": "not recorded here: the commit containing these rendered files is a descendant of rendered_at_commit, since the outputs cannot be committed until after they exist. verify_figures.py checks that HEAD is rendered_at_commit or a descendant."
   },
+  "caption": "Centred NC3 sign reversals by stratum and objective, counted at epoch 1 and by epoch 3. Supplementary and contextual only. A reversal is a sign change of centred NC3 for the same class and the same convention, measured from that cell's own epoch-0 baseline; it is defined at every recorded epoch, so no cell is missing from a row. The fraction printed at the end of each row is the number of cells reversed at any recorded epoch over the total number of cells in that row. Reversal frequency ranges from 8 of 8 for CIFAR-10 under ArcFace to 0 of 12 for the controlled nested sweep under ArcFace. The table beneath the chart gives the protocol differences that separate these strata: they differ at the same time in domain, input resolution, class count, the number of test images per forget class, and the dose protocol. Protocol comparability has not been demonstrated, the rows are therefore not points on a single axis, and they are never pooled into an overall rate; no pooled figure is computed or shown anywhere. The ordering of rows is not a dataset effect, not a class-count effect and not an effect of the objective, and CIFAR-10 and the face lineages are not two points on one axis. Stratum D uses a different source directory and a different minimum image count from the other face lineages, and its extraction seed was not recorded, so it cannot be regenerated from the repository alone. The most controlled comparison in the project is the nested class-count sweep, strata A and B, which shows no reversals at any K; that sweep too moves a bundle of correlated quantities with K rather than K alone. Five further cells, forming stratum F, are excluded because they are repeated observations of the stratum C and E cells at forget class 0 under different doses, and including them would double-count. 64 cells are plotted. No inferential claim is supported by the present analysis: these are counts of cells, and within a stratum the identities share a backbone per objective, a split and a baseline checkpoint.",
   "plotting_command": "python scripts/figures/make_figS1.py",
   "sources": [
     {
@@ -83,17 +86,18 @@
   "outputs": [
     {
       "path": "figures/figS1_reversal_by_stratum.pdf",
-      "sha256": "6eeee260da1d2ae3fbee769e5416ca298199ba8eee4d76bd617607a315fef0eb"
+      "sha256": "99f5f9f042ab040b428d1f117525913ad0bed12783f02685e4edfeeb4207a993"
     },
     {
       "path": "figures/figS1_reversal_by_stratum.png",
-      "sha256": "236261fd8d1bf483d2771f4d423dd14cd5c7fb624793a74a8e1c62eacf189cf4"
+      "sha256": "9d9c28ff22e5537c30eb760d8ca508b355c78a495a43c918e4fe800f278ebe7a"
     }
   ],
   "notes": [
     "Supplementary and contextual only; not a main result.",
     "64 cells plotted; 5 stratum-F repeated observations excluded.",
-    "No pooled headline rate is computed or displayed.",
-    "Each row label carries its own protocol incompatibilities inline."
+    "No pooled rate is computed or displayed.",
+    "Row labels are short; the protocol differences are in the table beneath the chart and in the caption.",
+    "The printed fraction is reversals at any recorded epoch over the row total; epoch-1 reversals remain a separate bar segment from those first appearing at epoch 2 or 3."
   ]
 }

@@ -1,11 +1,14 @@
 {
   "figure_id": "fig3_contrast_rules",
-  "generated_utc": "2026-09-17T19:24:20Z",
+  "generated_utc": "2026-09-17T20:32:34Z",
+  "render_width_inches": 7.0,
   "execution_revision": {
-    "commit": "9689c8be864d3ff0d477f221c68485a7e142cc40",
-    "dirty_excluding_figure_outputs": false,
-    "pending_paths": []
+    "rendered_at_commit": "bd7417309b93bedc9176b408867d2f049ce391a1",
+    "inputs_clean_excluding_generated_outputs_under_figures": true,
+    "uncommitted_non_output_paths_at_render_time": [],
+    "delivery_commit": "not recorded here: the commit containing these rendered files is a descendant of rendered_at_commit, since the outputs cannot be committed until after they exist. verify_figures.py checks that HEAD is rendered_at_commit or a descendant."
   },
+  "caption": "Two contrast rules applied to the same K = 100 cells, at two pipeline seeds, in the centred NC3 convention. The quantity is the difference-in-changes, ArcFace minus CE, of the change in centred NC3 from each cell's own epoch 0; it is project arithmetic rather than a metric from the source paper. (A) Fixed-epoch rule: both objectives are read at the same epoch, having received the same active forget dose of 9 steps per epoch at lambda = 1. The four-identity mean is positive at every epoch and at both seeds (+0.0574, +0.0648, +0.0607 at seed 0; +0.0595, +0.0708, +0.0686 at seed 1), while individual identities vary widely. Those means are descriptive over a complete and identical identity set, not estimates, so no band, error bar or interval is drawn. (B) Own-attainment rule: each objective is read at its own first epoch with 0 of 10 correct forget predictions. Because the two objectives generally reach that point at different epochs -- in 4 of the 7 attained pairs, marked in gold -- this panel confounds objective with exposure and is not a like-for-like head comparison. Identity 00142 at seed 1 is negative under this rule (-0.007274) while its fixed-epoch contrast is positive at all three epochs (+0.0271, +0.0246, +0.0173); it is labelled in both panels. That sign disagreement between the two rules is the point of the figure. Identity 00524 at seed 0 has no attained pair, because ArcFace never reached 0 of 10 within the budget (1 of 10 at epoch 3); it is shown in the gutter strip below the frame rather than at any y position, since a glyph placed at a value would read as a measured contrast and one placed at zero would read as a contrast of exactly zero. No epoch was substituted for it and the budget was not extended. Panel B carries no means: seed 0 has 3 attained identities and seed 1 has 4, so a cross-seed mean would compare different identity sets, and restricting to the common set 00001, 00142 and 00284 conditions on attainment in both seeds. Points are individual identities, a within-seed factor rather than replicates. A negative difference-in-changes is not an NC3 sign reversal: there are no sign reversals in any of the 16 K = 100 cells at either seed. Neither quantity measures unlearning quality or representation erasure, and two seeds do not establish robustness.",
   "plotting_command": "python scripts/figures/make_fig3.py",
   "sources": [
     {
@@ -122,12 +125,12 @@
       "seed0/00524"
     ],
     "highlight": {
-      "matched": -0.00727364360827909,
       "fixed_epoch": [
         0.02705759004643582,
         0.024598456882431452,
         0.017319245513827686
-      ]
+      ],
+      "matched": -0.00727364360827909
     },
     "n_attained_pairs": 7,
     "n_unequal_exposure": 4
@@ -135,17 +138,19 @@
   "outputs": [
     {
       "path": "figures/fig3_contrast_rules.pdf",
-      "sha256": "5d591a76d6021bd461de3b5a3c6fd33060a42892148cb4ed42cb8c77c5b7f2c7"
+      "sha256": "007c97ebaed289d0910a7352bac63e24a2b05a92c540638d15b15398f41fb4b8"
     },
     {
       "path": "figures/fig3_contrast_rules.png",
-      "sha256": "936932d37d5386679e43163d445bdcf386f557369dcd2707b552c06c62d163fc"
+      "sha256": "e21320d00a831a99aeba8a8223779f6afc11a0f5ecaa67d915fbeb96fb994374"
     }
   ],
   "notes": [
     "Centred convention only; both panels share one y-axis.",
     "Panel A means are descriptive over a complete and identical four-identity set, drawn with no band, error bar or interval.",
-    "Panel B has no means, and the absent seed-0 / 00524 observation is drawn outside the numerical data region.",
-    "4 of the 7 attained pairs read the two objectives at different epochs, so Panel B confounds objective with exposure."
+    "Panel B has no means, and the absent seed-0 / 00524 observation is drawn in a gutter strip outside the numerical data region.",
+    "4 of the 7 attained pairs read the two objectives at different epochs, so Panel B confounds objective with exposure.",
+    "Panel A's rule matches the active forget dose and the epoch; it is not described as equal optimization.",
+    "The identity-00142 case is marked with a short label in each panel rather than a cross-panel arc; the explanation is in the caption."
   ]
 }
