@@ -7,15 +7,28 @@ experiment was run to produce this document.**
 
 Target: CVPR 2027 — registration Nov 10 2026, submission Nov 16 2026.
 
-**Status of the research question.** The original framing offered three mutually
-exclusive outcomes: (1) unlearning under ArcFace must move features, (2)
-unlearning under ArcFace fails, (3) a third, uncharacterised mechanism. The
-evidence lands on **none of the three as stated**. What it supports is a
-*qualified negative result plus a mechanism analysis*: the shortcut is not
-closed, output forgetting succeeds under both heads, and the head difference
-appears in *how far the classifier rotates* — which is a different and narrower
-claim than any of the three anticipated outcomes. The write-up has to say that
-plainly rather than force the result into the original trichotomy.
+**Central framing (research-lead decision, 2026-09-17).**
+
+> In the evaluated settings, ArcFace does not eliminate classifier-only output
+> forgetting. CE and ArcFace exhibit different classifier dynamics, while NC3
+> interpretation depends on reference geometry and comparison rule.
+
+This is a **qualified negative result plus mechanism analysis**. It claims
+neither representation erasure nor superior unlearning by either head. The
+original three-outcome framing (features must move / unlearning fails / a third
+mechanism) does not fit and should not be forced onto the result.
+
+**Evidence hierarchy (research-lead decision).** The **core** is the controlled
+nested face sweep (stratum A), the seed-0 reference-frame decomposition, and
+the K=100 seed-1 replication (stratum B). Historical face and CIFAR findings
+(strata C, D, E) are **explicitly qualified context**. Incompatible lineages
+are **never pooled** — see the run inventory for why.
+
+**Epoch policy (research-lead decision).** Show full recorded trajectories
+where available. **Epoch 1 is the established decomposition anchor**; later
+epochs are sensitivity information. Historical reversal counts are always
+reported at an explicitly stated epoch. **Fixed-epoch and own-attainment
+contrasts are kept separate and never pooled.**
 
 **Reading conventions used throughout.**
 
@@ -41,83 +54,129 @@ plainly rather than force the result into the original trichotomy.
 
 ## Part I — Claims the evidence supports
 
-### C1. The universal hypothesis is unsupported: ArcFace does not prevent classifier-only output forgetting
+### C0. Run inventory and how every aggregate count is built
+
+**All counts below are stratified.** `evidence/run_inventory/clfonly_cell_inventory.csv`
+lists all **69 authoritative classifier-only cells** with lineage, objective,
+seed, K, forget identity, update mode, dose protocol, recorded epochs,
+attainment, reversal epochs, source artifact, and whether the artifact is
+reused elsewhere.
+
+| stratum | lineage | dose protocol | seeds | cells | role |
+|---|---|---|---|---|---|
+| **A** | faces-nested (`casia-webface-folders`, min40/max50), K=100/250/1000 | m=9, λ=1, per-cell reseed | 0 | 24 | **core** |
+| **B** | faces-nested, K=100 | m=9, λ=1, per-cell reseed | 1 | 8 | **core** |
+| **C** | faces-1000, forget ids {0,122,389,794} | uncontrolled (every retain step) | 0 | 8 | qualified context |
+| **D** | faces-100, **separate lineage** (`…-100id`, min100, extraction seed unrecorded) | uncontrolled | 0 | 8 | qualified context |
+| **E** | CIFAR-10 32×32 | uncontrolled | 0, 1 | 16 | qualified context |
+| **F** | fc0 only, CIFAR + faces-1000 | four different doses | 0 | 5 | **repeated observations**, not independent cells |
+
+**Excluded as non-authoritative, with reasons:** 8 pre-LR-fix CIFAR ArcFace
+cells (superseded by strata E); 10 `unlearn_pass1_nan_uncentred` cells (nan
+defect fixed at `51c38be`); 25 `logs_classcount_decomposition/` cells — these
+are **bitwise-identical replays** of stratum A (verified equal on
+`output_forget`, `output_retain`, both NC3 conventions, `nc1_angular`,
+`probe_forget`), so they are repeated observations of the same runs and carry
+no additional evidential weight.
+
+**Independent seed replications exist in exactly two places:** CIFAR-10
+(seeds 0 and 1, both heads, 4 classes) and faces-nested K=100 (seeds 0 and 1,
+both heads, 4 identities). Everything else is seed 0 only. **Four identities
+within a seed are not four seeds** and are never counted as replications.
+
+#### Audit of the previously quoted "31 of 32"
+
+**The arithmetic was right and the denominator was not.** Verified: 31 of 32
+ArcFace cells in strata A–E attain zero output forgetting. But that "32" was an
+arbitrary boundary — it silently **excluded the 5 stratum-F ArcFace fc0 control
+cells, all of which also attain** (36/37 if included) — and it pooled **two
+dose protocols** (16 cells at m=9/λ=1 against 16 uncontrolled), **four
+lineages**, and **three test-set resolutions** (CIFAR ~1000 test images per
+class; faces-100 25–31 per identity; faces-1000 and faces-nested exactly 10).
+A single ratio across those is not interpretable. **It is replaced by the
+stratified table in C1 and should not be quoted again.**
+
+---
+
+### C1. In the evaluated settings, ArcFace does not eliminate classifier-only output forgetting
 
 **Claim.** Classifier-only random-label unlearning drives forget-class output
-accuracy to zero under ArcFace as well as under CE, across every dataset and
-class count tested. The hypothesis that a normalised angular-margin loss closes
-the classifier shortcut is **not supported**.
+accuracy to zero under ArcFace in every stratum tested, as it does under CE.
+The hypothesis that a normalised angular-margin loss closes the classifier
+shortcut is **not supported in these settings**.
 
-**Evidence.** Attainment of `output_forget = 0` within the canonical 3-epoch
-budget, ArcFace cells:
+**Evidence — stratified attainment of `output_forget = 0` within 3 epochs:**
 
-| dataset / study | ArcFace cells | attained zero | source |
+| stratum | ArcFace | CE | not attained |
 |---|---|---|---|
-| CIFAR-10 (4 classes × 2 seeds) | 8 | 8/8, by epoch 1 | 2026-09-14 seed-0 rebuild; 2026-09-14 seed-1 re-run |
-| faces-1000 (4 identities) | 4 | 4/4 | 2026-09-14 faces entry; 2026-09-15 probe matrix |
-| faces-100 historical (4 identities) | 4 | 4/4, epochs 1–3 | 2026-09-14 100-identity entry |
-| nested K sweep, K=100/250/1000 | 12 | **11/12** | 2026-09-16 sweep |
-| K=100 seed 1 | 4 | 4/4 | 2026-09-17 replication |
+| **A** controlled nested sweep (seed 0) | **11/12** | 12/12 | K=100 fc95 (identity 00524), ArcFace |
+| **B** seed-1 replication, K=100 | 4/4 | 4/4 | — |
+| C historical faces-1000 | 4/4 | 4/4 | — |
+| D historical faces-100 | 4/4 | 4/4 | — |
+| E CIFAR-10 | 8/8 | 8/8 | — |
+| F fc0 controls (repeated obs.) | 5/5 | n/a | — |
 
-**The one exception, stated explicitly:** K=100, seed 0, ArcFace, fc95
-(identity 00524) ends at 1/10 and never reaches zero inside three epochs. It
-does **not** recur at seed 1, where the same identity attains at epoch 1. The
-budget was not extended to resolve it.
+**The one exception, stated explicitly:** stratum A, K=100, seed 0, ArcFace,
+identity 00524 ends at 1/10 and never reaches zero inside the budget. It does
+**not** recur in stratum B, where the same identity attains at epoch 1. The
+budget was not extended.
 
-**Does not assert.** That forgetting is *equally fast* under both heads (see
-C8). That output-level zero means erasure (see C4). That this generalises to
-unlearning methods other than classifier-only random-label, to CosFace, or to
-full-model unlearning at a tuned learning rate.
+**Does not assert.** Equal speed (C8). That zero output accuracy means erasure
+(C4). Generality beyond `random_label` classifier-only unlearning at this dose
+and budget — no CosFace, and full-model unlearning only as a narrow fc0 control
+(C11a).
 
 ---
 
-### C2. Centred NC3 sign reversal is dataset-dependent, not a property of the loss
+### C2. Centred NC3 reversal frequency differs markedly across experimental settings
 
-**Claim.** The CIFAR-10 finding — ArcFace's forget-class weight flipping
-negative — does **not** replicate on faces. Reversal frequency varies from
-8/8 to 0/24 across datasets with the loss held fixed.
+**Claim.** Reversal frequency ranges from 8/8 to 0/24 across the settings
+tested, with the objective held fixed within each comparison. **The design does
+not isolate which factor produces this**, so the difference is reported
+descriptively across settings, not attributed to dataset.
 
-**Evidence** (centred convention, `random_label_clfonly`, epoch 0 → epoch 1
-unless noted):
+**Evidence — centred convention, epoch stated explicitly:**
 
-| dataset | head | n | reversals |
-|---|---|---|---|
-| CIFAR-10 | ArcFace | 8 | **8/8** |
-| CIFAR-10 | CE | 8 | 0/8 |
-| faces-100 historical | ArcFace | 4 | **1/4** at ep1; 2/4 at ep3 |
-| faces-1000 | ArcFace | 4 | **0/4** |
-| nested K sweep (K=100/250/1000) | both | 24 | **0/24**, any epoch |
-| K=100 seed 1 | both | 8 | **0/8**, any epoch |
+| stratum | head | n | reversals at **epoch 1** | reversals at **any epoch 1–3** |
+|---|---|---|---|---|
+| **A** controlled nested sweep | ArcFace | 12 | **0/12** | **0/12** |
+| **A** | CE | 12 | 0/12 | 0/12 |
+| **B** seed-1 K=100 | ArcFace | 4 | **0/4** | **0/4** |
+| **B** | CE | 4 | 0/4 | 0/4 |
+| C faces-1000 | ArcFace | 4 | 0/4 | 0/4 |
+| C | CE | 4 | 0/4 | 0/4 |
+| D faces-100 | ArcFace | 4 | **1/4** | **2/4** |
+| D | CE | 4 | 0/4 | 0/4 |
+| E CIFAR-10 | ArcFace | 8 | **8/8** | **8/8** |
+| E | CE | 8 | 0/8 | 0/8 |
 
-So across the 16 K=100 cells at two seeds, and the 24 sweep cells, there are
-**zero** sign reversals in either convention. The `w_k^un = −(1−γ)μ_k` flip the
-AISTATS theory predicts does not appear under this method and budget on faces.
+**Uncentred reversals: 0 of all 69 cells.**
 
-**Depends on.** The **centred** convention. Uncentred values must not be used
-for this claim: ArcFace starts near −0.88 everywhere, so uncentred "negatives"
-are not reversals.
+**Why no causal attribution.** CIFAR-10 and the face lineages differ
+simultaneously in domain, input resolution (32×32 vs 112×112), class count,
+scale *s*, images per identity, test-set resolution and dose protocol. Strata C
+and D differ from each other in source directory, `min_images`, images per
+identity **and** identity membership — only 31 of D's 100 identities appear in
+C's set. The only comparison in this project that moves **one** variable is
+stratum A's nested sweep across K, and it shows **no** reversals at any K.
 
-**Does not assert.** That class count causes the difference (C6 rules out the
-obvious mechanism). Domain, resolution, scale *s*, images per identity and
-class count all covary between CIFAR and the face sets, and between the two
-face lineages. No comparison in this project isolates any one of them.
+**Does not assert.** That reversal is or is not "a property of the loss" — that
+phrasing is withdrawn as unsupported. That class count causes the difference.
+That the settings are otherwise comparable enough to pool; **they are not, and
+a cross-setting reversal summary is supplementary context only.**
 
 ---
 
-### C3. Sign reversal is neither necessary for output forgetting nor sufficient evidence of representation erasure
+### C3. Centred reversal is neither necessary for output forgetting nor sufficient evidence of representation erasure
 
-**Claim, two halves, both supported.**
+**Not necessary.** In strata A and B (32 cells, the controlled core) every cell
+but one reaches `output_forget = 0` with **zero** centred reversals. Strata C
+and D add 8 more ArcFace cells reaching zero with 0/4 and 1/4 reversal at
+epoch 1.
 
-**Not necessary.** Both face subsets reach `output_forget = 0` with reversal in
-0/4 (faces-1000) and 1/4 (faces-100) identities. Zero output forgetting happens
-without any centred sign reversal.
-
-**Not sufficient.** On CIFAR-10, ArcFace reverses in 8/8 cells **under a frozen
-backbone**, where the representation is unchanged by construction. A reversal
-therefore cannot be read as evidence that features moved.
-
-**Source.** 2026-09-15 NC3 convention clarification, which states this as the
-supported thesis under one convention throughout.
+**Not sufficient.** In stratum E, ArcFace reverses 8/8 at epoch 1 **under a
+frozen backbone**, where the representation is unchanged by construction. A
+reversal therefore cannot itself be evidence that features moved.
 
 **Does not assert.** Anything about necessity or sufficiency for "the illusion"
 as Gao et al. define it — only for the two measurable quantities named.
@@ -143,93 +202,97 @@ run only as a narrow paired control (C11).
 
 ---
 
-### C5. Under a matched forget dose, CE's forget-class weight moves substantially more than ArcFace's
+### C5. Two-seed fixed-epoch NC3 recurrence (metric level, strata A+B)
 
-**Claim.** At equal forget dose (m=9 active steps/epoch, λ=1, 3 epochs), CE's
-classifier-to-class-mean cosine falls markedly while ArcFace's barely moves.
-This is the project's most robust positive finding.
+**Claim.** At a fixed epoch and matched forget dose, the four-identity mean
+centred DiC is positive at K=100 and recurs in direction and similar magnitude
+across the two pipeline seeds. **This is a metric-level result. It is stated
+independently of the rotation/norm mechanism in C6, which rests on seed 0
+alone.**
 
-**Evidence — metric level.** Fixed-epoch DiC, centred, mean over four
-identities:
+**Evidence — fixed-epoch centred DiC, mean over four identities, K=100:**
 
-| epoch | seed 0 | seed 1 |
+| epoch | seed 0 (stratum A) | seed 1 (stratum B) |
 |---|---|---|
-| 1 | +0.0574 | +0.0595 |
-| 2 | +0.0648 | +0.0708 |
-| 3 | +0.0607 | +0.0686 |
+| **1** (anchor) | +0.0574 | +0.0595 |
+| 2 (sensitivity) | +0.0648 | +0.0708 |
+| 3 (sensitivity) | +0.0607 | +0.0686 |
 
-Sign counts (4 identities × 3 epochs = 12 per seed): centred **10/12** positive
-at seed 0 (the two negatives are fc95 at epochs 2 and 3 — **one cell observed
-twice, not two cells**) and **12/12** at seed 1; uncentred **12/12** at both
-seeds. Larger K gives larger centred DiC (+0.1093 at K=250, +0.1393 at K=1000,
-epoch 1) — but see C6 before attributing that to K.
+Sign counts, fixed-epoch, 4 identities × 3 epochs = 12 per seed: centred
+**10/12** positive at seed 0 — the two negatives are identity 00524 at epochs 2
+and 3, **one cell observed twice, not two cells** — and **12/12** at seed 1;
+uncentred **12/12** at both seeds.
 
-**Evidence — mechanism level.** Forget-weight rotation, mean over four
-identities, from the decomposition:
+Larger K gives larger centred DiC at seed 0 (+0.1093 at K=250, +0.1393 at
+K=1000, epoch 1), but see C6 before reading that as a K effect.
+
+**Does not assert.** **Positive DiC is not superior unlearning**, and not
+erasure. Four identities are not four seeds: the recurrence is across **two**
+seeds at one K. The dose figures are loop-structure counts explicitly labelled
+"not a gradient magnitude" in the artifacts, so this is not a statement about
+gradient sizes.
+
+---
+
+### C6. Seed-0 mechanism: classifier rotation and norm, and the reference-frame account of the K ordering
+
+**Scope, stated first.** Everything in this claim comes from the **seed-0**
+reference-frame decomposition over stratum A's 24 cells. **No seed-1
+decomposition exists**, so none of it is a two-seed result. The research lead
+has closed this line: do not reopen without specific contradictory evidence.
+
+**C6a — rotation and norm (seed 0).** Forget-weight rotation, mean over four
+identities:
 
 | epoch | CE | ArcFace |
 |---|---|---|
 | 1 | 16.7–17.8° | 3.3–4.7° |
 | 3 | 20.8–22.6° | 5.2–6.2° |
 
-CE's forget-weight norm ratio is 0.830–0.874; ArcFace's is 0.996–1.001. So
-ArcFace's classifier both rotates less and preserves its norm.
+Forget-weight norm ratio: CE 0.830–0.874, ArcFace 0.996–1.001. So at seed 0,
+CE's classifier rotates several times further and loses norm, while ArcFace's
+rotates little and preserves norm. Norm does not enter the cosine; it is a
+descriptive fact about the weight, not a driver of `nc3_*_forget`.
 
-**Does not assert.** **Positive DiC is not superior unlearning.** It says CE's
-cosine moves further under a matched dose; it is not a claim about erasure
-quality, privacy, or which head one should prefer. It is also not a claim about
-gradient magnitudes — the dose figures are loop-structure counts, explicitly
-labelled "not a gradient magnitude" in the artifacts.
+**C6b — the K ordering is a reference-frame effect, in this seed-0
+decomposition.** Centred DiC orders K=100 < 250 < 1000, but:
 
----
-
-### C6. The apparent K ordering is measurement geometry, not increasing classifier rotation
-
-**Claim.** Centred DiC orders K=100 < 250 < 1000, but this is **not** because
-the forget weight rotates more at larger K, and **not** because the centring
-reference drifts. It is the sensitivity of centred NC3 to a **fixed** reference
-frame whose geometry varies with K.
-
-**Evidence.**
 - **Not reference drift.** Holding the retain-weight centre at epoch 0
   reproduces the ordering essentially unchanged (+0.0561/+0.1087/+0.1393 vs
   production +0.0574/+0.1093/+0.1393 at epoch 1). Moving *only* the centre
-  yields +0.0004/+0.0002/+0.0003 — flat, two to three orders of magnitude
-  below production. Largest residual 0.0068 against a largest production change
-  of 0.2007.
-- **Not more rotation.** CE's forget weight rotates 17.8°/16.7°/17.4° at epoch
-  1 and 22.6°/20.8°/21.5° at epoch 3 — **non-monotone, spanning ~1.8°**.
-- **Where it does live.** The centred frame's reference is `f_0 − g_0`, and
+  gives +0.0004/+0.0002/+0.0003 — flat, two to three orders of magnitude below
+  production. Largest residual 0.0068 against a largest production change of
+  0.2007.
+- **Not more rotation.** CE's forget weight rotates 17.8°/16.7°/17.4° at
+  epoch 1 — **non-monotone, spanning ~1.8°**.
+- **Where it enters.** The centred frame's reference is `f_0 − g_0`, and
   `|g_0|/|f_0|` for CE is 0.80/0.73/0.69 at K=100/250/1000. Both the baseline
   angle (31.9° < 34.2° < 39.1°) and the projected rotation (9.14° < 9.60° <
-  11.32°) increase with K and reinforce. Since a cosine's sensitivity to
+  11.32°) increase with K and reinforce; since a cosine's sensitivity to
   rotation is −sin θ, the ordering follows. The **uncentred** baseline angle is
-  non-monotone (58.0° > 54.1° > 53.2°) and the uncentred changes inherit that
-  non-monotonicity — which is why the uncentred convention shows **no** K
-  ordering.
-- **Why CE's centre is inert:** CE's retain-weight centre is nearly the zero
-  vector (`|c_0|/|w_0|` = 0.0248/0.0104/0.0012), so its large angular movement
-  moves the metric by ~1e-4. **Why ArcFace's is inert:** ArcFace's centre is
-  nearly as long as the weight (0.96–1.01) so centring matters greatly to its
-  *level*, but the centre barely moves (0.02–0.07°), so it contributes nothing
-  to the *change*.
-
-**Per the handoff, this is closed. Do not reopen the decomposition without
-specific contradictory evidence.**
+  non-monotone (58.0° > 54.1° > 53.2°) and its changes inherit that — which is
+  why the uncentred convention shows **no** K ordering.
+- **Why each head's centre is inert, for opposite reasons.** CE's
+  retain-weight centre is nearly the zero vector (`|c_0|/|w_0|` =
+  0.0248/0.0104/0.0012), so its large angular movement moves the metric by
+  ~1e-4. ArcFace's centre is nearly as long as the weight (0.96–1.01), so
+  centring matters greatly to its *level*, but the centre barely moves
+  (0.02–0.07°) and so contributes nothing to the *change*.
 
 **Does not assert.** That class count changes forget-class erasure. The
-ordering rests on **three** K points — K=500 is absent because it failed the
-2.00pp fairness gate (ArcFace exceeded CE by 2.36pp) and was not tuned to
-rescue it — adjacent K overlap per cell, and at epoch 3 K=100 includes a
-negative cell under the fixed centre (fc95, −0.0226). K also covaries with
-retain-set size, retain steps per epoch, spacing of the nine active steps,
-BatchNorm exposure and problem difficulty. Candidate forget exposure varies
-too (1240/3080/12,120 presentations per epoch); only the *active* count (360)
-is held fixed.
+ordering rests on **three** K points (K=500 absent — it failed the 2.00pp
+fairness gate at 2.36pp and was not tuned to rescue it), adjacent K overlap per
+cell, and at epoch 3 K=100 includes a negative cell under the fixed centre
+(identity 00524, −0.0226). K covaries with retain-set size, retain steps per
+epoch, active-step spacing, BatchNorm exposure and task difficulty; candidate
+forget exposure varies 1240/3080/12,120 per epoch while only the *active* count
+(360) is held fixed. The counterfactuals are **interventions on the metric, not
+on training**; `A` is nonlinear in both arguments, so the four corners are
+arithmetic leftovers, never causal contributions.
 
 ---
 
-### C7. Two-seed replication at K=100: the four-identity mean recurs; identity-level contributions do not
+### C7. K=100 seed-1 replication detail: gate, contrast rules, and the fc29 sign disagreement
 
 **Claim.** The four-identity mean fixed-epoch K=100 DiC recurs in direction and
 similar magnitude across two pipeline seeds, while identity-level contributions
@@ -256,8 +319,9 @@ sign counts: centred 3/3 positive (seed 0, n=3), **3 positive / 1 negative**
 fc0, fc29 — ArcFace +1 epoch each); 3 are equal. So a matched-outcome contrast
 confounds head with exposure and is not interchangeable with fixed-epoch DiC.
 
-**Does not assert.** Population-level robustness. Two seeds support no
-significance test. The eight seed-1 cells are **four identities × two
+**Does not assert.** Population-level robustness. Two seeds give no usable
+variance estimate for a seed effect, so no inferential statement is made here.
+The eight seed-1 cells are **four identities × two
 objectives at one seed** — not eight independent replications; within a seed
 they share one backbone per head, one split, one baseline checkpoint. Cross-seed
 means of *matched* contrasts compare **different identity sets** (3 attained at
@@ -287,11 +351,15 @@ epoch grid of {1, 2, 3}, at 0.1 accuracy granularity, cannot support one.
 
 ---
 
-### C9. The uncentred-NC3 baseline offset is a property of the loss, not of unlearning
+### C9. Uncentred-NC3 baseline offsets are an observed head-associated difference, present before any unlearning
 
-**Claim.** ArcFace's uncentred NC3 sits near −0.88 *before any unlearning*, on
-every dataset; CE's sits near +0.50 to +0.72. This is a property of the
-objective's learned weight geometry, present at baseline.
+**Claim.** In every setting measured, models trained with the ArcFace head show
+a baseline uncentred NC3 near −0.88 and models trained with the CE head near
++0.51 to +0.72. This offset is **observed at baseline, before any unlearning**,
+and is therefore not produced by the unlearning procedure. It is reported as an
+**objective/head-associated difference**; head and its training configuration
+(scale *s*, margin *m*, warmup) covary, so no stronger attribution to the loss
+function alone is claimed.
 
 **Evidence** (`nc3_uncentred_mean` at baseline, re-read from each run's own
 `results.jsonl`):
@@ -306,10 +374,14 @@ objective's learned weight geometry, present at baseline.
 
 So CE spans **+0.51 to +0.72** and ArcFace **−0.878 to −0.895** — opposite
 sides of zero on every dataset, before any unlearning. Per-cell seed-1 ArcFace
-epoch-0 values run −0.8904 to −0.8990. **Mechanism identified:**
-ArcFace's retain-weight centre is nearly as long as the forget weight itself
-(`|c_0|/|w_0|` ≈ 0.96–1.01) — a shared-component offset — where CE's centre is
-nearly the zero vector.
+epoch-0 values run −0.8904 to −0.8990.
+
+**An observed structural correlate, seed 0 only.** In the seed-0 decomposition
+of stratum A, ArcFace's retain-weight centre is nearly as long as the forget
+weight (`|c_0|/|w_0|` ≈ 0.96–1.01) while CE's is nearly the zero vector
+(0.0012–0.0248) — a shared-component offset consistent with the sign difference.
+This is a **measured correlate in one seed on one lineage**, not a demonstrated
+cause, and no seed-1 decomposition exists to corroborate it.
 
 **Consequence for the write-up.** Raw uncentred NC3 must never be compared
 across heads. This is the single most likely reviewer trap in the paper, and
@@ -317,10 +389,12 @@ the guard belongs in the methods section, not a footnote.
 
 ---
 
-### C10. Probe gaps: the CIFAR head separation does not transfer to faces, and the two face subsets disagree
+### C10. Probe gaps separate the objectives on CIFAR-10 but not in either face setting, and the two face settings differ from each other
 
-**Claim.** `probe_gap_to_retrain*` separates the heads on CIFAR-10 and does not
-on either face subset.
+**Claim.** `probe_gap_to_retrain*` separates the two objectives on CIFAR-10 and
+does not in either face setting. Reported descriptively across settings: the
+design does not isolate why, since domain, resolution, class count, images per
+identity, identity membership and test-set denominator all covary.
 
 **Evidence** (macro mean over 4 classes/identities, seed 0, n=4 per group):
 
@@ -372,10 +446,14 @@ stream (identical candidate trace hashes throughout). The dose grid is closed.
 
 ---
 
-### C12. Measurement integrity results worth reporting as contributions
+### C12. Candidate methodological lessons
 
-These are methodological findings, not incidental bug fixes, and at least the
-first two belong in the paper.
+**Framing.** These are **candidate** methodological lessons drawn from this
+project's own measurement experience. They are **not** established novel
+contributions: no literature check has been done on whether any is already
+known, and items 3 and 4 are project-specific diagnostics rather than general
+results. Whether any belongs in the paper — and with what novelty framing — is a
+decision for Dr Rawat, and would need the outstanding novelty searches first.
 
 1. **Centring contamination.** Standard NC3 centres classifier weights by their
    global mean; flipping one class's weight shifts the centring for *every*
@@ -395,7 +473,8 @@ first two belong in the paper.
    (i.e. every ArcFace run) on an incomplete schedule, ending at lr 0.00670
    rather than 0.00000. Fixing it moved CIFAR ArcFace seed-1 test accuracy
    91.71% → 93.09% and changed a result that had been attributed to seed
-   variance. All pre-fix ArcFace points were rebuilt, not reinterpreted.
+   variance. All pre-fix ArcFace points were rebuilt, not reinterpreted. This is
+   an implementation-hygiene lesson, almost certainly not novel.
 
 ---
 
@@ -407,8 +486,8 @@ State these as scope, not as apology. Each is blocked by a specific, named gap.
 |---|---|
 | **Any representation-erasure claim** | Backbone frozen in every main cell; class means bit-identical across epochs. The probe metric measures post-hoc linear decodability after fitting on labelled forget-class examples, not erasure. |
 | **Class-count causality** | C6 rules out the obvious mechanism and identifies a measurement-geometry origin; K covaries with retain-set size, step counts, active-step spacing, BN exposure and task difficulty. K=500 is absent. |
-| **Any statistical significance** | No test is run anywhere in the project and none would be supportable: one seed almost everywhere, two at K=100 and on CIFAR, n=4 identities per group. No distributional assumption is made about any reported spread. |
-| **Held-out forgetting generalisation** | `split_mode=all` throughout, so `forget-heldout` is 0 in every run. The subset-mode generalisation experiment was never run. |
+| **Inferential claims from the current design** | No statistical test is reported anywhere, and the tests a reader would reach for are **inappropriate for this design**, not merely unrun: treating the four identities as independent replicates is invalid (within a seed they share one backbone per head, one split, one baseline checkpoint), and two seeds give no usable variance estimate for a seed effect. Descriptive means, ranges and sign counts are reported instead. This is a statement about **what these data can support**, not that no test could ever be computed on any design — a properly powered study with independent seeds as the replication unit, and identities as a within-seed factor, would admit standard inference. |
+| **Forget-set generalisation (within-identity)** | A **held-out test split does exist and is used throughout** — `stratified_image_split` reserves ~20% of every identity's images, including the forget identity's, and all `output_forget` / `output_retain` / `probe_forget` numbers are measured on it. What is untested is a **different** form of generalisation: because `split_mode=all` throughout, every *training* image of the forget identity is handed to the unlearning method, so `forget-heldout` is 0 in every run. The untested question is whether forgetting **generalises to training images of the forget identity that the unlearner never saw** — the `split_mode=subset` experiment, never run. |
 | **Any CosFace result** | Never run. The head exists in `src/heads.py` and in `configs/cifar_cosface.yaml`; no experiment used it. |
 | **faces-100 reproducibility from the repository alone** | The extraction seed for `casia-webface-folders-100id` was never recorded, and identity selection inside the converter is `rng.choice`-driven. That subset is not reconstructable from artifacts; it is a separate lineage from the nested sweep and must not be pooled with it. |
 | **Direct post-unlearning backbone state equality** | Cells save no model state; only starting baseline checkpoints exist. The frozen-backbone claim rests on the code path (`eval()` mode, gradients off, optimizer over head parameters only) plus a **toy-model** buffer test (`Linear + BatchNorm1d(5)`, untrained, CPU — not ResNet-18). Constant `nc1_angular` is *consistent with* an unchanged mapping but is **not proof**: a scalar summary is many-to-one. No rerun is authorized. |
@@ -424,7 +503,11 @@ State these as scope, not as apology. Each is blocked by a specific, named gap.
 faces-1000, faces-100, K=250, K=500, K=1000, the decomposition, all dose and
 movement controls — is **seed 0 only**.
 
-**Sample size.** Four identities or classes per group throughout. n=4.
+**Replication unit.** The only valid replication unit in this design is the
+**seed**, and there are at most two (CIFAR-10 and faces-nested K=100). The four
+identities within a seed are a **within-seed factor**, not replicates: they
+share one backbone per head, one train/test split and one baseline checkpoint.
+Any analysis that treats them as independent would overstate precision.
 
 **Metric resolution.** Test images per forget identity: CIFAR-10 ~1000 per
 class; faces-100 25–31; **faces-1000 and the nested sweep exactly 10**. On the
@@ -503,6 +586,17 @@ supersession notes are appended in place, historical text preserved):
 | C10 | 2026-09-15 complete face probe-gap matrix |
 | C11 | 2026-09-15 paired movement controls; dual-dose; dose-component matrix |
 | C12 | 2026-09-09 two measurement bugs; 2026-09-14 LR schedule truncation; 2026-09-15 NC3 subsampling diagnostics |
+
+**Run inventory.** `evidence/run_inventory/clfonly_cell_inventory.csv` — all 69
+authoritative classifier-only cells with lineage, objective, seed, K, forget
+identity, update mode, dose, recorded epochs, attainment, reversal epochs,
+source artifact and reuse status. **Every aggregate count in this document is
+derived from it and is stratified.**
+
+**Figure specifications.** `notes/figure_specs.md` — four specified figures
+(three main, one supplementary), with claim addressed, exact source artifacts,
+panels/axes/units/series, missing-outcome handling, draft caption and
+must-not-imply for each. Plotting code and rendered figures are deferred.
 
 **Tracked numeric evidence.** `evidence/k100_seed1/` — 16 verbatim per-cell
 trajectories (both seeds), four corrected tables, resolved configs,
