@@ -165,9 +165,12 @@ def git_revision() -> dict:
         ).stdout.strip()
 
     pending = [
-        line[3:]
-        for line in run("git", "status", "--porcelain").splitlines()
-        if not line[3:].lstrip('"').startswith("figures/")
+        path
+        for path in (
+            line[2:].strip().strip('"')
+            for line in run("git", "status", "--porcelain").splitlines()
+        )
+        if path and not path.startswith("figures/")
     ]
     return {
         "commit": run("git", "rev-parse", "HEAD"),

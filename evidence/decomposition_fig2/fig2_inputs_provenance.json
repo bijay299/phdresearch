@@ -1,8 +1,12 @@
 {
   "purpose": "Figure 2 plotting inputs, copied verbatim from the git-ignored decomposition artifact tree.",
   "extraction_revision": {
-    "commit": "e0d0f2c2e10969cd47c949d588aad7be189efe38",
-    "dirty": true
+    "commit": "2bdef43524bcf8b8d98336e8b6b6b59db5ea37c5",
+    "dirty_excluding_figure_outputs": true,
+    "pending_paths": [
+      "evidence/decomposition_fig2/fig2_inputs_provenance.json",
+      "scripts/figures/figlib.py"
+    ]
   },
   "source": {
     "path": "logs_classcount_decomposition/decomposition.json",
